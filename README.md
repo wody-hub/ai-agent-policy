@@ -1,8 +1,10 @@
-# Codex Agent Policy
+# AI Agent Policy
 
-Codex의 모델별 역할 배분과 멀티에이전트 운영 전략을 전역 공통 지침에 적용하기 위한 공유 문서입니다.
+Codex와 Claude Code의 공통 지침, 모델별 역할 배분, 멀티에이전트 운영 전략을 공유하고 관리하는 저장소입니다.
 
-## 사용 방법
+현재는 Codex 적용 프롬프트를 제공합니다. Claude Code 전용 지침은 추후 추가할 예정입니다.
+
+## Codex 사용 방법
 
 1. [공통 모델 운영 전략 적용 프롬프트](codex-global-model-routing-prompt.md)를 엽니다.
 2. 문서의 코드 블록 내용을 복사하여 자신의 Codex에 입력합니다.
