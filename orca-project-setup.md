@@ -1,6 +1,6 @@
 # Orca 프로젝트 공통 전략 설치 지시서
 
-버전: `orca-project-policy@v1.0.4` · 기준일: 2026-10-07
+버전: `orca-project-policy@v1.0.5` · 기준일: 2026-10-07
 
 Codex와 Claude Code 어느 쪽에서도 사용할 수 있는 프로젝트별 설치 지시서입니다. 기존 전역 지침을 유지하면서, dev 기준의 Orca 작업 워크트리와 도구 구분 없는 모델 배정 전략을 설치합니다.
 
@@ -24,7 +24,7 @@ Codex와 Claude Code 어느 쪽에서도 사용할 수 있는 프로젝트별 �
 너는 기존 프로젝트의 Orca AI 개발 환경 설치 담당자다. 다음 정책을 프로젝트별로 설치하고 검증해줘. 기존 Codex·Claude 전역 지침은 수정하지 않는다. 프로젝트의 소스 구조·아키텍처·라이브러리·API·DB를 임의로 변경하지 않는다.
 
 VERSION
-orca-project-policy@v1.0.4 (2026-10-07)
+orca-project-policy@v1.0.5 (2026-10-07)
 
 VARIABLES
 - PROJECT_ROOT: 현재 프로젝트. 여러 저장소를 묶는 상위 폴더일 수 있다.
@@ -32,6 +32,7 @@ VARIABLES
 - POLICY_DIR: GUIDE_DIR/orca.
 - BASE_BRANCH: dev. 다른 브랜치로 자동 대체하지 않는다.
 - BASE_REF: 해당 프로젝트에서 확정한 dev 또는 origin/dev. 동일 저장소에서 선택을 일관되게 유지한다.
+- BASE_REF 표기: refs/heads/dev는 dev, refs/remotes/origin/dev는 origin/dev로 정규화한다. dev와 origin/dev는 서로 다른 ref이며 같은 SHA라는 이유로 합치지 않는다.
 - WORKER_LIMIT: 운영상 동시 작업자 3개 이하. 실제 런타임 제한이 더 낮으면 그 제한을 따른다.
 
 PHASE 0 — 발견·백업·설치 범위
@@ -65,6 +66,9 @@ POLICY A — 작업 위치와 dev 불변 조건
 POLICY B — 호스트에 중립적인 지휘와 실행
 - Main은 사용자 의도, 우선순위, 완료 조건, 최종 판단을 맡는다.
 - Controller는 Orca 조회, dev와 작업 위치 확인, 모델 선택, Worker 배정, 상태·결과 회수와 아래의 최소 Task 등록 부트스트랩만 맡는다. 필요할 때 호스트가 지원하는 별도 Controller를 사용하고 운영 체계를 중복 만들지 않는다.
+- Controller는 사용자가 명시한 에이전트·도구·모델·세션 지정을 우선한다. Codex나 특정 모델을 고정 Controller로 두지 않는다. 지정이 없으면 현재 요청을 받은 에이전트가 지원되는 범위에서 Main과 Controller를 겸할 수 있으며, 다른 Controller를 자동 생성하지 않는다.
+- 지정된 Controller의 설치·접근·Orca 조율 기능과 실제 세션·터미널 연결을 확인한다. 실행할 수 없거나 대상이 모호하면 해당 조율 시작·전환을 보류하고 필요한 정보나 대체 지정을 요청한다. Codex 등 다른 에이전트로 임의 대체하거나 실행 확인 없이 Controller 전환을 완료했다고 보고하지 않는다.
+- Controller 지정과 Worker 모델 선택은 별개다. POLICY C의 작업별 후보나 전역 메인 모델 기본값으로 사용자의 Controller 지정을 덮어쓰지 않는다. 실행 context와 인계 기록에 사용자 지정값, 확인한 Controller 도구·모델·세션, Main·Controller 겸임 여부를 구분해 남긴다. 진행 중 변경은 기존 조율 상태·미결 메시지·Worker 책임을 인계하고 실제 권한 연결을 확인한 뒤 적용하며 중복 지휘를 만들지 않는다.
 - 실제 업무 조사·구현·문서 작성·검증은 Orca가 관리하는 Worker에게 맡긴다. Orca Worker 대신 대화의 비관리 구현 서브에이전트를 사용하지 않는다. 단순 질의 응답·정책 읽기·조율·상태 조회에는 Worker 생성을 요구하지 않는다.
 - 역할은 실행 context에서 명시한다. 배정 규칙은 Main·Controller에 적용하며 Worker는 배정된 범위를 직접 실행한다. Worker의 재위임은 Main·Controller가 명시적으로 승인하고 추적 가능한 실행인 경우만 허용한다.
 - 작은 업무를 현재 에이전트가 직접 수행한다는 전역·Task 규칙은 Orca에서는 현재 에이전트가 해당 작업 워크트리의 관리되는 Worker일 때 적용한다. Main·Controller는 작은 업무도 비관리 경로로 구현하지 않는다.
@@ -93,6 +97,7 @@ POLICY D — 실행 검사와 단일 시작 경로
 3. 새 워크트리 생성과 새 Worker 터미널 생성을 구분한다. 같은 업무를 이어갈 때 워크트리를 다시 만들지 않는다. 에이전트가 이미 생성돼 있으면 중복 실행하지 않는다.
 4. setup과 에이전트가 동시에 시작되는 환경에서는 setup 성공과 정책 검사를 확인하기 전 업무 프롬프트를 전달하지 않는다. 지원되면 wait-for-setup 방식을 사용한다.
 5. 별도 검사 스크립트가 필요하면 프로젝트의 도구 경로에 설치하고 문법·정상/거부 사례를 검증한다. 그것을 Orca 네이티브 설정이라고 주장하지 않는다.
+   Orca catalog의 baseRef와 Task 등록 base_ref는 동일 ref의 전체/축약 표기를 정규화한 뒤 비교한다. refs/heads/dev ↔ dev, refs/remotes/origin/dev ↔ origin/dev만 허용하며 다른 remote·branch·잘못된 표기를 dev로 바꾸지 않는다. 원시 메타데이터를 수정해 통과시키지 않는다. 정규화는 생성 SHA·직접 dev 부모·실제 위치·담당 범위 검사를 대체하지 않으며, baseRef 부재 시 독립 Git 근거를 요구하는 기존 검사도 유지한다.
 6. 실제 모델·추론은 실행 receipt의 requested/effective 정보와 런타임의 모델 표시·응답 정보로 확인한다. requested 값만 있으면 실행 모델 미검증으로 기록한다.
 7. 수신 accepted는 입력 수락의 증거다. 실제 turn_started나 로그까지 확인해야 작업 시작으로 보고한다. 모호한 응답에 새 작업자를 무작정 추가하지 않는다.
 8. Codex·Claude가 지원하는 프로젝트 수준의 도구 실행 전 검사로 실제 작업 위치와 담당 경로를 검사한다. 기존 훅을 보존하고 문서로만 금지한 것을 실행 차단이라고 보고하지 않는다.
@@ -118,7 +123,7 @@ POLICY E — 작업 권한·교체·완료
 PHASE 2 — 문서와 루트 진입 연결
 1. 기존 AI_CONTEXT.md, PROJECT_RULES.md, BUILD_AND_TEST.md, ORCA_WORKFLOW.md를 우선 재사용한다. 없으면 설치에 필요한 실제 근거만 조사하고 부족한 항목을 UNKNOWN으로 기록한다.
 2. POLICY_DIR에 ORCA_POLICY.md, MODEL_ROUTING.md, WORKTREE_RULES.md, INSTALLATION.md를 생성한다. 위 정책을 프로젝트의 실제 경로·검증된 명령·모델 후보에 맞춰 작성한다.
-3. 문서 첫 줄에 generated-by: orca-project-policy@v1.0.4과 생성일을 주석으로 기록하고, 마지막에 프로젝트 보정 섹션을 둔다. GENERATED.md에 상대 경로·버전·생성일·보정 상태를 기록한다. 기존 산출물 행을 보존한다.
+3. 문서 첫 줄에 generated-by: orca-project-policy@v1.0.5과 생성일을 주석으로 기록하고, 마지막에 프로젝트 보정 섹션을 둔다. GENERATED.md에 상대 경로·버전·생성일·보정 상태를 기록한다. 기존 산출물 행을 보존한다.
 4. AGENTS.md와 CLAUDE.md에는 orca-project-policy:begin/end 관리 블록만 추가하거나 갱신한다. 기존 진입 파일과 내용을 보존한다. 적용되지 않는 AGENTS.override.md나 프로젝트 설정이 있는지도 확인한다.
 5. CLAUDE.md는 상대 경로의 @import로 핵심 정책을 연결한다. AGENTS.md에는 첫 업무 행동으로 핵심 정책을 실제로 끝까지 읽고 적용하라는 규칙과 상대 경로를 둔다. Markdown 링크가 자동 import라고 가정하지 않는다.
 6. 여러 저장소에서는 공통 정본을 버전 관리되는 문서 저장소에 두고 각 저장소에는 버전이 고정된 정책 사본 또는 검증된 로컬 스냅샷과 진입 연결을 설치한다. 다른 작업 워크트리의 변경 가능한 문서를 직접 참조하지 않는다.
@@ -137,6 +142,8 @@ PHASE 3 — 설치 부트스트랩과 기준 커밋
 
 PHASE 4 — 수용 검증
 - 문서 경로·import·관리 블록·명령 지원·스크립트 문법과 기존 설정 보존을 확인한다.
+- ref 표기 검사: 전체/축약형 조합의 동일 ref를 허용하고 dev와 origin/dev 불일치, 다른 remote·branch·잘못된 표기, 잘못된 SHA·부모·위치를 거부한다. baseRef 부재의 독립 근거 검사와 task-only 동작을 보존하고, 전체 ref catalog를 가진 기존 legacy 업무의 실제 시작 검사도 확인한다.
+- Controller 지정 검사: Codex 세션에서 Claude를 지정한 경우와 Claude 세션에서 Codex를 지정한 경우 각각 사용자 지정이 우선되고 Worker 선택과 분리되는지 확인한다. 미지정 시 현재 에이전트가 겸임 가능하며, 지정한 에이전트가 실행 불가하면 임의 대체 없이 보류하는지 확인한다. 진행 중 변경은 실제 권한 연결·상태 인계 후 적용되는지 확인하고 실제 실행하지 않은 항목은 미검증으로 기록한다.
 - 정상 검사: dev 기준 SHA와 dev 부모 ID로 생성한 업무 워크트리를 허용한다. Task 정책이 있으면 생성 전 실제 workspace ID 부재는 허용하되 Worker 배정 전 실제 매핑 누락은 거부한다. 신규 브랜치의 TASK_ID 포함과 자동 명명 보정 후 Orca·Git 정합성을 확인한다.
 - 최초 설치·복구 검사: Orca 뒤 Task 정책 설치와 Orca dev 반영 대기 중 추가 설치도 설치 전용 경로를 따르는지 확인한다. 정책 파일이 없는 설치용 dev 자식 워크트리에서 제한된 설치 Worker 시작·파일 작성만 허용하고, 범위 밖 수정과 일반 업무 시작을 거부한다. 파일 생성 후 재검사·예외 종료를 확인한다.
 - 거부 검사: 일반 업무에서는 기본 dev, 다른 부모, 다른 초기 기준 SHA, 누락된 정책, setup 실패를 거부한다. 실제 작업 중 이동한 dev와의 SHA 차이는 거부 사례가 아니다.
