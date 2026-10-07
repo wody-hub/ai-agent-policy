@@ -1,6 +1,6 @@
 # Orca 프로젝트 공통 전략 설치 지시서
 
-버전: `orca-project-policy@v1.0.0` · 기준일: 2026-10-07
+버전: `orca-project-policy@v1.0.1` · 기준일: 2026-10-07
 
 Codex와 Claude Code 어느 쪽에서도 사용할 수 있는 프로젝트별 설치 지시서입니다. 기존 전역 지침을 유지하면서, dev 기준의 Orca 작업 워크트리와 도구 구분 없는 모델 배정 전략을 설치합니다.
 
@@ -24,7 +24,7 @@ Codex와 Claude Code 어느 쪽에서도 사용할 수 있는 프로젝트별 �
 너는 기존 프로젝트의 Orca AI 개발 환경 설치 담당자다. 다음 정책을 프로젝트별로 설치하고 검증해줘. 기존 Codex·Claude 전역 지침은 수정하지 않는다. 프로젝트의 소스 구조·아키텍처·라이브러리·API·DB를 임의로 변경하지 않는다.
 
 VERSION
-orca-project-policy@v1.0.0 (2026-10-07)
+orca-project-policy@v1.0.1 (2026-10-07)
 
 VARIABLES
 - PROJECT_ROOT: 현재 프로젝트. 여러 저장소를 묶는 상위 폴더일 수 있다.
@@ -97,6 +97,8 @@ POLICY D — 실행 검사와 단일 시작 경로
 
 POLICY E — 작업 권한·교체·완료
 - 각 Task에 목표, 관련 저장소·워크트리, 담당 파일·책임, 인터페이스, 제약, 완료 조건을 지정한다.
+- project-task-policy가 설치돼 있으면 업무 TASK_ID와 문서 정본을 먼저 확인하고, 이 정책에서 만든 각 저장소의 dev 자식 워크트리·실제 브랜치·기준 SHA를 업무 연결표에 등록한 뒤 Worker를 배정한다. 업무 ID와 Orca Task/Run/Dispatch ID는 구분해 연결한다. Task 등록·브랜치 매핑·문서 커밋 조건을 완료 검사에 포함한다.
+- project-task-policy가 없으면 해당 설치를 요구하거나 문서 저장소·docs/tasks를 자동 생성하지 않는다. 이 지시서의 실행 규칙만 적용한다. 설치 순서와 관계없이 기존 Task 정책의 관리 블록·정본·프로젝트 보정을 보존한다.
 - 동일 파일을 수정하는 권한은 한 작업자에게만 둔다. 읽기 전용 Reviewer는 Read·Grep·Glob처럼 실제 읽기 도구로 제한하고 Bash·쓰기 MCP 권한을 허용하지 않는다.
 - 기본은 Worker 1개다. 독립적인 작업만 3개 이하로 병렬화하고 실제 런타임 제한을 따른다. 같은 파일·DB 영역·공통 생성 산출물·API 계약은 분리하거나 순차 실행한다.
 - 다른 작업자의 변경을 되돌리지 않는다. 작업공간 격리만으로 DB·포트·외부 시스템이 격리된다고 가정하지 않는다.
@@ -111,7 +113,7 @@ POLICY E — 작업 권한·교체·완료
 PHASE 2 — 문서와 루트 진입 연결
 1. 기존 AI_CONTEXT.md, PROJECT_RULES.md, BUILD_AND_TEST.md, ORCA_WORKFLOW.md를 우선 재사용한다. 없으면 설치에 필요한 실제 근거만 조사하고 부족한 항목을 UNKNOWN으로 기록한다.
 2. POLICY_DIR에 ORCA_POLICY.md, MODEL_ROUTING.md, WORKTREE_RULES.md, INSTALLATION.md를 생성한다. 위 정책을 프로젝트의 실제 경로·검증된 명령·모델 후보에 맞춰 작성한다.
-3. 문서 첫 줄에 generated-by: orca-project-policy@v1.0.0과 생성일을 주석으로 기록하고, 마지막에 프로젝트 보정 섹션을 둔다. GENERATED.md에 상대 경로·버전·생성일·보정 상태를 기록한다. 기존 산출물 행을 보존한다.
+3. 문서 첫 줄에 generated-by: orca-project-policy@v1.0.1과 생성일을 주석으로 기록하고, 마지막에 프로젝트 보정 섹션을 둔다. GENERATED.md에 상대 경로·버전·생성일·보정 상태를 기록한다. 기존 산출물 행을 보존한다.
 4. AGENTS.md와 CLAUDE.md에는 orca-project-policy:begin/end 관리 블록만 추가하거나 갱신한다. 기존 진입 파일과 내용을 보존한다. 적용되지 않는 AGENTS.override.md나 프로젝트 설정이 있는지도 확인한다.
 5. CLAUDE.md는 상대 경로의 @import로 핵심 정책을 연결한다. AGENTS.md에는 첫 업무 행동으로 핵심 정책을 실제로 끝까지 읽고 적용하라는 규칙과 상대 경로를 둔다. Markdown 링크가 자동 import라고 가정하지 않는다.
 6. 여러 저장소에서는 공통 정본을 버전 관리되는 문서 저장소에 두고 각 저장소에는 버전이 고정된 정책 사본 또는 검증된 로컬 스냅샷과 진입 연결을 설치한다. 다른 작업 워크트리의 변경 가능한 문서를 직접 참조하지 않는다.
