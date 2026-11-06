@@ -4,7 +4,7 @@ AI에게 개발 업무를 맡길 때 **누가 일을 할지, 어디에서 작업
 
 필요한 파일을 AI에게 읽히고 설치를 요청하면, 이후 작업에서 따라야 할 지침과 지원되는 설정을 구성합니다. 아래에서 각 파일이 어떤 상황에 필요한지 설명하고, 뒤쪽에서 상세 운영 전략을 다룹니다.
 
-기준일: **2026-10-07**. 모델·추론 수준·실행 기능은 계정과 제공자, 설치 버전에 따라 달라지므로 적용할 때 다시 확인합니다.
+기준일: **2026-10-07** · 모델 라우팅 개편: **2026-11-06**(전략 1.3.0, 비용 우선, Fable·Astra 최종 단계, Orca 프로젝트별 Controller). 모델·추론 수준·실행 기능은 계정과 제공자, 설치 버전에 따라 달라지므로 적용할 때 다시 확인합니다.
 
 ## 파일 설명과 설치 방법
 
@@ -129,30 +129,77 @@ Codex만 사용하면 Codex 파일부터, Claude Code만 사용하면 Claude 파
 - 로그에는 업무 데이터·개인정보가 들어갈 수 있으므로 작업이 끝나면 직접 띄운 서버를 멈추고 임시 로그를 정리합니다. 남겨야 하면 로컬 작업 기록 폴더에만 둡니다.
 - 작업을 마치거나 보고할 때 직접 띄운 백그라운드 프로세스와 그 로그 크기를 함께 보고합니다.
 
+## 비용 우선 모델 라우팅 (전략 1.3.0)
+
+**기본 모델은 Sonnet과 Luna입니다.** Opus·Sol은 승격 조건이나 고위험 작업에서만, Fable·Astra는 Opus·Sol로도 해결하지 못한 최종 단계에서만 사용합니다. 최우선 목표는 토큰 절약이며, 검증을 생략해 절약하지 않습니다. 평가 기준은 토큰 수가 적은 모델이 아니라 **작업을 성공적으로 끝내는 데 든 총비용**입니다.
+
+모델 ID·작업 유형·승격 순서·재시도 상한·대체 모델은 [`policy/model-routing.json`](policy/model-routing.json) 한 곳에서 관리합니다. 정책 문서와 설치 지시서는 이 설정의 값을 설명할 뿐이며, 설정을 바꾸면 라우팅 명령의 결과가 바뀝니다.
+
+| 복잡도 | 대상 예시 | Orca Worker | Claude 단독 | Codex 단독 |
+| --- | --- | --- | --- | --- |
+| 역할: 루트 오케스트레이터·프로젝트 코디네이터 | 작업 분해·조정·최종 검토 | Sonnet medium | Sonnet medium | Luna high |
+| LEVEL 1 단순 | 이름 변경, 문서, 테스트 작성, 정형 코드, 단순 UI, 기존 패턴 반복, 일반 코드 분석 | Luna medium | Sonnet low | Luna medium |
+| LEVEL 2 일반 | 기능·API·데이터 로직·프론트엔드, 일반 버그, 일반 코드 리뷰 | Sonnet medium | Sonnet medium | Luna high |
+| LEVEL 3 복잡 | 다중 모듈, 상태 관리, 성능, 비동기, 통합, 복잡한 데이터 흐름, 아키텍처 설계 | Sonnet high | Sonnet high | Luna xhigh |
+| LEVEL 4 고난도 | 중대한 구조 변경, 동시성, 반복 미해결 오류, 광범위 분석, 보안, 데이터 무결성 | Opus high 또는 Sol high | Opus high | Sol high |
+| LEVEL 5 최종 단계 | LEVEL 4에서도 2회 실패한 문제만 (시작 레벨로 쓰지 않음) | Fable high 또는 Astra high | Fable high | Astra high |
+
+파일·심볼 조회와 정형 추출은 Haiku 4.5(Claude) 또는 Luna medium(Codex)이 맡습니다. Claude 단독 세션에서 Luna를 쓰려고 Codex를 호출하지 않습니다. 도구 간 전달 비용이 절약분보다 크기 때문입니다.
+
+**승격.** 같은 실행자가 검증 실패·원인 미파악·복잡도 급증으로 2회 실패하면 한 단계 승격합니다(Luna → Sonnet → Opus/Sol). 구조 위험·요구사항 모순·데이터 무결성 위험은 즉시 LEVEL 4로 갑니다. 환경·권한·외부 서비스·테스트 환경·모델 접근 오류는 승격 사유가 아니며 같은 모델로 상태를 보존한 채 원인을 해결합니다. 모델을 바꿔도 시도 횟수는 초기화되지 않습니다. LEVEL 4(Opus/Sol)에서도 2회 실패하면 최종 단계인 LEVEL 5(Fable/Astra)로 올리고, 거기서도 2회 실패하면 자동 승격을 멈추고 사용자에게 증거와 필요한 판단을 넘깁니다. 고위험 작업이나 대체 모델 선택으로 LEVEL 5에 바로 가지 않습니다.
+
+**승격 인계.** 전체 대화를 넘기지 않고 목표, 관련 파일, 현재 구현 상태, 오류, 시도 내용, 실패 가설, 필요한 판단만 구조화해 전달합니다. 상위 모델은 문제 분석이나 핵심 결정만 맡고, 구현은 가능하면 Sonnet·Luna가 이어받습니다. 해결되면 후속 작업은 원래 복잡도의 기본 모델로 돌아갑니다.
+
+**고위험 작업.** 인증·인가, 암호화, 운영 인프라, 파괴적 DB 작업, 데이터 손실 위험이 있는 마이그레이션, 데이터 무결성은 승격을 기다리지 않고 처음부터 LEVEL 4 분석·검토와 Human Gate를 거칩니다. 비용 절약은 이 안전 규칙보다 우선하지 않습니다.
+
+**토큰 절약 원칙.** 작업과 직접 관련된 파일·문서·설정만 전달하고 이미 확보한 분석은 재사용합니다. 독립 실행·검증이 가능한 단위로 나누되, 나누는 비용이 더 크면 하나로 둡니다. 같은 목표의 에이전트를 중복 생성하지 않고, 전체 저장소 탐색과 같은 파일의 반복 분석을 피하며, 끝난 에이전트는 바로 종료하고 중간 보고는 짧게 합니다. 병렬 실행은 독립 작업의 실익이 있을 때만 하며 동시 작업자는 3개, 동시 상위·최종 단계 모델(Opus·Sol·Fable·Astra 합계) 작업자는 1개 이하입니다.
+
+### 라우팅·사용량 명령
+
+```bash
+# 작업 유형 또는 복잡도로 모델 선택 (JSON에 orca worker-start 인수 포함)
+python3 -B -m ai_policy.routing --host orca --task-type docs
+python3 -B -m ai_policy.routing --host orca --task-type feature --failures 2 --failure-kind verification
+python3 -B -m ai_policy.routing --host orca --task-type docs --resolved   # 해결 후 원래 작업 유형의 기본 모델로 복귀
+python3 -B -m ai_policy.routing --host orca --task-type docs --available sonnet,opus   # 사용 불가 모델 대체
+
+# 작업 결과 기록과 모델별 사용량·성공률 보고 (로그의 사용량 수치만 읽고 대화 내용은 읽지 않음)
+python3 -B -m ai_policy.usage record --task-id T-1 --model gpt-6-luna --task-type docs --success true --verified true
+python3 -B -m ai_policy.usage report --since 2026-11-01
+```
+
+라우팅 결과의 `action`은 `run`, `retry`, `escalate`, `retry_same_model_preserve_state`, `return_to_default`, `handoff_to_lead`, `blocked_no_available_model` 중 하나입니다. `orca_worker_args`는 `run`·`retry`·`escalate`·`retry_same_model_preserve_state`·`return_to_default`일 때만 채워지며, 호출자는 실행 전에 `action`을 확인합니다. 사용할 수 있는 모델이 없으면 종료 코드 40(`blocked_no_available_model`), LEVEL 5까지 실패하면 종료 코드 41(`handoff_to_lead`)로 인수를 비우고 작업 상태를 보존합니다. LEVEL 5는 시작 레벨로 지정할 수 없고, 그 레벨의 실패를 보고할 때만 `--level 5 --failures N`으로 넘깁니다. 상위 모델은 대체 모델로도 선택되지 않습니다. 사용량 보고는 Claude Code 세션 로그와 Codex rollout 로그의 모델·토큰·캐시 수치만 집계합니다. 비용 단가는 출처가 확인될 때까지 설정에 넣지 않으며, 그동안 비용은 `not_collected`로, 추천은 성공 1건당 토큰으로 계산합니다.
+
 ## Codex 전략
 
-**Sol이 판단·통합을 맡고, Luna가 명확한 기능을 구현부터 검증까지 책임지는 균형형 전략**입니다. Luna를 반복 작업에만 제한하지 않고, 기존 패턴과 계약이 명확한 중간 규모 기능까지 맡깁니다.
+**Luna가 메인과 구현을 맡고, Sol은 승격 조건에서만 진단을 맡는 비용 우선 전략**입니다. Luna를 반복 작업에만 제한하지 않고, 기존 패턴과 계약이 명확한 중간 규모 기능까지 맡깁니다.
 
 | 책임 | 모델 | 초기 추론 수준 |
 | --- | --- | --- |
-| 메인·요구사항·통합·최종 검토 | `gpt-6.1-sol` | `medium` |
-| 기능 구현·관련 검증 | `gpt-6-luna` | `high` |
-| 좁은 탐색·로그 정리·정형 변환 | `gpt-6-luna` | `medium` |
-| 어려운 진단·상태·동시성·구조 변경 | `gpt-6.1-sol` | `high`, 필요 시 `xhigh` |
-| 예외적인 전문가 판단 | `gpt-6-astra` | 판단에 따라 `medium` 또는 `high` |
+| 메인·요구사항·통합·최종 검토 | `gpt-6-luna` | `high` |
+| 기능 구현·관련 검증 (LEVEL 2) | `gpt-6-luna` | `high` |
+| 단순 작업·좁은 탐색·정형 변환 (LEVEL 1) | `gpt-6-luna` | `medium` |
+| 복잡한 개발 (LEVEL 3) | `gpt-6-luna` | `xhigh` |
+| 승격·고위험 진단 (LEVEL 4) | `gpt-6.1-sol` | `high` |
+| 최종 단계 (LEVEL 5, Sol 2회 실패 후) | `gpt-6-astra` | `high` |
 | 선택적 독립 검토 | 사용 가능한 Claude 모델 | 실제 지원 수준 |
 
 ```text
-Sol이 범위·공통 계약·완료 조건 정의
-  → Luna high 구현·검증
-  → Sol이 diff·검증 근거·통합 동작 검토
+Luna high 메인이 범위·공통 계약·완료 조건 정의
+  → Luna 작업자 구현·검증
+  → 메인이 diff·검증 근거·통합 동작 검토
 
-불명확하거나 결합이 높은 문제
-  → Sol high가 진단·실행
-  → 필요한 경우에만 Astra 또는 Claude 검토
+같은 원인으로 2회 실패
+  → 한 단계 승격 (Luna medium → high → xhigh → Sol high)
+
+구조·무결성 위험, 요구사항 모순, 고위험 작업
+  → 바로 Sol high가 진단 (가능하면 구현은 Luna로 복귀)
+
+Sol도 2회 실패
+  → 최종 단계 Astra high, 여기서도 실패하면 사용자 판단
 ```
 
-Senior Sol은 다른 모델이 아니라 추론 수준을 높인 전문 역할입니다. Luna → Senior Sol → Astra를 모든 작업의 필수 경로로 만들지 않습니다. 작은 작업은 직접 완료하고, Sol이 이미 맥락을 이해한 복잡한 작업도 직접 처리할 수 있습니다.
+Astra는 Sol까지 실패한 경우에만 쓰는 마지막 단계이며 일상 경로가 아닙니다. 작은 작업은 직접 완료하고, Sol이 진단 후 바로 수정하는 편이 싸면 다시 넘기지 않습니다.
 
 이 배분의 근거는 Luna의 집중된 작업에 대한 효율성과 6.1 Sol의 복잡한 작업에 대한 역할입니다. 공식 Codex 문서는 Luna의 시작 추론 수준으로 high를 안내합니다. 역할별 담당 범위 확대는 프로젝트에서 평가할 운영 제안이며 Luna가 모든 작업에서 Sol과 같다는 주장은 아닙니다. [공식 모델 안내](https://learn.chatgpt.com/docs/models), [서브에이전트 안내](https://learn.chatgpt.com/docs/agent-configuration/subagents)
 
@@ -160,44 +207,47 @@ Senior Sol은 다른 모델이 아니라 추론 수준을 높인 전문 역할�
 
 전역 지침은 유효한 `CODEX_HOME`의 `AGENTS.md`, 모델 기본값은 같은 위치의 `config.toml`에 반영합니다. 기본 디렉터리는 `~/.codex`입니다.
 
-기본 설정은 메인 Sol medium, 서브에이전트 Luna high이며 단순 조사에는 medium을 명시합니다. 환경이 지원하면 동시 서브에이전트 상한을 3개로 설정합니다. `AGENTS.override.md`, 프로젝트 지침과 사용자 지정 에이전트 설정이 적용을 바꿀 수 있으므로 확인합니다.
+기본 설정은 메인 Luna high, 서브에이전트 Luna high이며 단순 작업·조사에는 medium을 명시합니다. 2026-11-06 이전 설치본은 메인이 Sol medium(실제 설정은 Terra medium)이었습니다. 환경이 지원하면 동시 서브에이전트 상한을 3개로 설정합니다. `AGENTS.override.md`, 프로젝트 지침과 사용자 지정 에이전트 설정이 적용을 바꿀 수 있으므로 확인합니다.
 
 파일 수정과 새 세션의 유효 설정 확인은 구분합니다. 현재 메인 모델은 정책 문구만으로 바뀌지 않습니다. [전역 지침 로딩](https://learn.chatgpt.com/docs/agent-configuration/agents-md)
 
 ## Claude Code 전략
 
-**Opus가 판단·통합을 맡고, Sonnet이 명확한 기능을 구현·검증하는 전략**입니다. Sonnet의 기본 실행과 정밀 검증을 구분하며 Haiku는 단순 조회, Fable은 예외적 자문에 사용합니다.
+**Sonnet이 메인과 구현을 맡고, Opus는 승격 조건과 고위험 작업에서만 쓰는 비용 우선 전략**입니다. Haiku는 단순 조회, Fable은 Opus까지 실패한 문제의 최종 단계에 한정합니다.
 
 | 책임 | 기준 모델 ID | 초기 추론 수준 |
 | --- | --- | --- |
-| 메인·요구사항·통합·최종 검토 | `claude-opus-5-5` | `medium` |
-| 명확한 기능 구현·관련 검증 | `claude-sonnet-5-5` | `medium` |
-| 재현 가능한 버그·경계 조건·정밀 검증 | `claude-sonnet-5-5` | `high` |
+| 메인·요구사항·통합·최종 검토 | `claude-sonnet-5-5` | `medium` |
+| 단순 작업 (LEVEL 1) | `claude-sonnet-5-5` | `low` |
+| 일반 기능 구현·관련 검증 (LEVEL 2) | `claude-sonnet-5-5` | `medium` |
+| 복잡한 개발·재현 버그·정밀 검증 (LEVEL 3) | `claude-sonnet-5-5` | `high` |
 | 파일 탐색·정형 추출·짧은 요약 | `claude-haiku-4-5-20251001` | effort 지정 안 함 |
-| 불명확한 진단·상태·동시성·구조 변경 | `claude-opus-5-5` | `high`, 필요 시 `xhigh` |
-| 예외적 자문·장기 맥락의 난제 | `claude-fable-5-1` | `high` |
+| 승격·고위험 진단 (LEVEL 4) | `claude-opus-5-5` | `high`, 필요 시 `xhigh` |
+| 최종 단계 (LEVEL 5, Opus 2회 실패 후) | `claude-fable-5-1` | `high` (2026-11-06 접근 확인) |
 | 선택적 독립 검토 | 사용 가능한 Codex 모델 | 실제 지원 수준 |
 
 ```text
-Opus가 범위·공통 계약·완료 조건 정의
-  → Sonnet medium 구현·검증
-  → Opus가 diff·검증 근거·통합 동작 검토
+Sonnet medium 메인이 범위·공통 계약·완료 조건 정의
+  → Sonnet low/medium/high 작업자 구현·검증 (복잡도에 따라)
+  → 메인이 diff·검증 근거·통합 동작 검토
 
-검증 요구가 높거나 경계 조건이 많은 작업
-  → Sonnet high
+같은 원인으로 2회 실패
+  → 한 단계 승격 (Sonnet low → medium → high → Opus high)
 
-불명확하거나 결합이 높은 문제
-  → Opus high가 진단·실행
-  → 필요한 경우에만 Fable 또는 Codex 검토
+구조·무결성 위험, 요구사항 모순, 고위험 작업
+  → 바로 Opus high가 진단 (가능하면 구현은 Sonnet으로 복귀)
+
+Opus도 2회 실패
+  → 최종 단계 Fable high, 여기서도 실패하면 사용자 판단
 ```
 
-Opus는 관리만 하는 모델이 아닙니다. 이미 진단한 문제를 직접 수정하는 편이 효율적이면 완료까지 맡습니다. Fable은 출시 순서나 이름만으로 모든 작업에서 우월하다고 가정하지 않으며 필수 승격 단계로 두지 않습니다. 기본 Fable 자문에는 쓰기·실행 권한을 부여하지 않습니다.
+Opus는 진단한 문제를 직접 수정하는 편이 더 싸면 완료까지 맡습니다. 해결 뒤 후속 작업은 Sonnet으로 돌아갑니다. Fable은 출시 순서나 이름만으로 모든 작업에서 우월하다고 가정하지 않으며, Opus까지 실패한 문제에만 쓰는 마지막 단계입니다. 최종 단계에서는 진단과 수정을 함께 맡깁니다(fable-specialist).
 
 ### Claude 모델 근거와 기존 전략의 변경
 
 2026-10-07 공식 목록에서 확인한 운영 후보는 Fable 5.1, Opus 5.5, Sonnet 5.5, Haiku 4.5입니다. 확인 환경은 Claude Code 2.1.290이었으며, 최소 읽기 전용 호출에서 sonnet과 opus가 각각 `claude-sonnet-5-5`, `claude-opus-5-5`로 응답했습니다. Fable·Haiku는 이 확인 과정에서 실제 호출하지 않았습니다. 이 결과는 해당 환경의 접근 확인이며 구현 성능 평가가 아닙니다. [공식 모델 목록](https://platform.claude.com/docs/en/models/overview)
 
-기존 Opus 5·Sonnet 5 기준을 갱신하고, Claude Code의 Opus 5.5·Sonnet 5.5 기본값인 medium에서 시작합니다. 버그·경계 조건·검증 요구에 따라 high를 선택합니다. API 문서의 기본 추론값을 Claude Code 설정에 그대로 대입하지 않으며 별칭의 제공자별 해석을 확인합니다. [Claude Code 모델 설정](https://code.claude.com/docs/en/model-config)
+제품 기본 추론 수준은 Opus 5.5·Sonnet 5.5 모두 medium이지만, 이 정책의 운영값은 Sonnet을 레벨에 따라 low·medium·high로, Opus는 승격 전용이므로 high로 둡니다. API 문서의 기본 추론값을 Claude Code 설정에 그대로 대입하지 않으며 별칭의 제공자별 해석을 확인합니다. [Claude Code 모델 설정](https://code.claude.com/docs/en/model-config)
 
 단순 작업의 강제 인계와 모호한 재시도 횟수를 없애고, 자문과 실행의 권한을 분리합니다. Codex의 Terra 등 고정 계층 대신 실제 사용 가능한 모델을 확인해 독립 검토를 배정합니다.
 
@@ -205,7 +255,7 @@ Opus는 관리만 하는 모델이 아닙니다. 이미 진단한 문제를 직�
 
 사용자 지침은 `~/.claude/CLAUDE.md`, 설정은 `~/.claude/settings.json`, 개인 에이전트는 `~/.claude/agents/`에 반영합니다. 실제 설정 디렉터리를 먼저 확인하고 개인 지침의 관리 영역만 갱신합니다.
 
-권장 에이전트는 sonnet-engineer(medium), sonnet-debugger(high), haiku-worker, opus-lead(high 자문), opus-specialist(high 실행), fable-advisor(high 자문)입니다. 자문은 Read·Grep·Glob만 허용하고 Bash·Edit·Write나 쓰기 MCP 권한을 허용하지 않습니다. 실행자는 승인된 수정·검증에 필요한 도구만 사용합니다. [커스텀 서브에이전트](https://code.claude.com/docs/en/sub-agents)
+권장 에이전트는 sonnet-light(low), sonnet-engineer(medium), sonnet-debugger(high), haiku-worker, opus-lead(high 자문), opus-specialist(high 실행), fable-specialist(high, 최종 단계 진단·실행)입니다. 자문은 Read·Grep·Glob만 허용하고 Bash·Edit·Write나 쓰기 MCP 권한을 허용하지 않습니다. 실행자는 승인된 수정·검증에 필요한 도구만 사용합니다. [커스텀 서브에이전트](https://code.claude.com/docs/en/sub-agents)
 
 모델은 지원되는 model 설정, 추론은 현재 버전의 모델별 설정으로 저장합니다. 최상위 effortLevel만으로 최신 모델에 적용된다고 가정하지 않습니다. 조직 정책, 환경 변수와 프로젝트 설정이 이를 덮어쓸 수 있으며 기존 세션 재개·safe/bare 모드는 일반 새 세션과 다를 수 있습니다. CLAUDE.md는 행동 지침이며 모델·권한을 강제하는 설정은 아닙니다. Agent Teams·Ultracode는 설치 과정에서 자동 활성화하지 않습니다. [지침 로딩](https://code.claude.com/docs/en/memory), [설정 우선순위](https://code.claude.com/docs/en/settings)
 
@@ -254,19 +304,23 @@ Git 분기 기준과 Orca 화면의 부모 관계는 별개의 조건입니다. 
 
 Main은 사용자 의도와 최종 판단, Controller는 Orca 조회·작업 위치·모델 선택·배정·결과 회수, Worker는 실제 조사·구현·문서·검증을 맡습니다. 실제 업무 실행을 Orca의 관리 밖에서 수행해 작업자 추적을 우회하지 않습니다. 배정 규칙은 Main·Controller에 적용하고 Worker는 담당 범위를 직접 실행합니다. Worker의 재위임에는 Main·Controller의 명시적 승인과 추적 가능한 실행이 필요합니다. 단순 질의 응답·정책 읽기·조율·상태 조회에는 Worker 생성을 요구하지 않습니다.
 
-**Controller는 사용자가 지정한 에이전트가 맡습니다.** Codex로 고정하지 않으며, Codex에서 요청해도 Claude를 Controller로 지정할 수 있고 반대도 가능합니다. 지정이 없으면 현재 에이전트가 지원되는 범위에서 Main과 Controller를 겸합니다. 지정한 에이전트의 실행·접근·Orca 조율 기능을 확인할 수 없으면 임의 대체하지 않고 필요한 정보나 대체 지정을 요청합니다. Controller 지정과 아래 Worker 모델 선택은 별개이며, 진행 중 Controller 변경은 조율 상태와 권한 연결을 확인해 인계합니다.
+**기본 구조는 Main → 프로젝트별 Controller → Worker입니다.** 실행 목표가 있으면 Main은 Project·Goal마다 별도 Controller 하위 에이전트(Sonnet medium)를 두고 사용자 대화와 최종 판단만 맡습니다. Controller는 자기 Run을 만들고 모든 명령에 `--run`을 붙이며, `check --run <id> --wait`로 Worker 결과를 받습니다. Main이 Orca 메일로 깨워지면 해당 Run의 Controller에 넘깁니다. 2026-11-06 시험 실행에서 이 구조로 Worker 완료를 받았고 Main은 깨워지지 않았습니다. Orca 실행 재시도(도구·환경·Worker 중단)는 같은 원인에 최대 3회, 모델 판단 실패의 승격 기준은 2회입니다. **사용자가 Controller를 지정하면 그 지정이 우선합니다.** Codex로 고정하지 않으며, Codex에서 요청해도 Claude를 Controller로 지정할 수 있고 반대도 가능합니다. 호스트가 하위 에이전트를 지원하지 않으면 그 제한을 보고하고, 사용자와 정한 경우에만 Main이 Controller를 겸합니다. 지정한 에이전트의 실행·접근·Orca 조율 기능을 확인할 수 없으면 임의 대체하지 않고 필요한 정보나 대체 지정을 요청합니다. Controller 지정과 아래 Worker 모델 선택은 별개이며, 진행 중 Controller 변경은 조율 상태와 권한 연결을 확인해 인계합니다.
 
-| 역할 | 통합 후보군 |
-| --- | --- |
-| 좁은 탐색·추출 | Luna medium, Haiku |
-| 명확한 기능 구현 | Luna high, Sonnet 5.5 medium |
-| 버그·검증이 중요한 구현 | Luna high, Sonnet 5.5 high |
-| 어려운 진단·복잡한 통합 | Sol 6.1 high, Opus 5.5 high |
-| 예외적 중요 판단 | Astra, Fable 5.1 |
+| 역할 | 기본 | 대체 후보 |
+| --- | --- | --- |
+| Controller(프로젝트 코디네이터) | Sonnet 5.5 medium | Luna high |
+| 좁은 탐색·추출 | Luna medium | Haiku |
+| LEVEL 1 단순 작업·문서·테스트 | Luna medium | Sonnet 5.5 |
+| LEVEL 2 일반 개발·일반 리뷰 | Sonnet 5.5 medium | Luna high |
+| LEVEL 3 복잡한 개발 | Sonnet 5.5 high | Luna |
+| LEVEL 4 승격·고위험 | Opus 5.5 high 또는 Sol 6.1 high | 서로 대체 |
+| LEVEL 5 최종 단계 (LEVEL 4 2회 실패 후) | Fable 5.1 high | Astra high |
+
+Controller는 `python3 -B -m ai_policy.routing --host orca ...` 결과의 `action`을 확인한 뒤, 실행 가능한 action이면 `orca_worker_args`를 `orca orchestration worker-start`에 넘깁니다. 결과의 요청 모델과 실제 실행 모델은 따로 확인합니다.
 
 Codex 지휘자가 Claude Worker를 선택할 수 있고, Claude 지휘자도 Codex Worker를 선택할 수 있습니다. Orca 정책은 양쪽 도구의 구현·검증 배정을 명시적으로 허용합니다. 상위 시스템·개발자·조직 정책과 실행 권한은 넘지 않으며 Orca 밖에서는 기존 전략을 유지합니다. 고위험 작업의 분석·검토도 선택한 Sol high 또는 Opus high가 담당합니다. 두 계열을 모두 필수 검토자로 요구하지 않으며 위험에 따라 독립 전문가 검토를 추가합니다.
 
-선택은 접근·설치·실행 호스트·필요 도구를 지원하는 후보 중에서 작업의 불명확성·결합·검증 가능성·실패 영향과 유사 업무의 성공 기록으로 결정합니다. 기록이 없으면 낮은 전체 비용으로 성공할 가능성이 높은 후보를 선택합니다. 브랜드별 고정 순위나 특정 유형의 무조건적 우열을 만들지 않습니다. 요청값과 실제 실행된 도구·모델·추론 수준, 선택 이유를 기록합니다.
+선택은 위 기본값에서 시작해 접근·설치·실행 호스트·필요 도구를 지원하는 후보 중에서 작업의 불명확성·결합·검증 가능성·실패 영향과 유사 업무의 성공 기록으로 조정합니다. `ai_policy.usage report`의 추천이 충분한 표본으로 나오면 그 기록을 우선합니다. 브랜드별 고정 순위나 특정 유형의 무조건적 우열을 만들지 않습니다. 요청값과 실제 실행된 도구·모델·추론 수준, 선택 이유를 기록합니다.
 
 모델 교체는 기존 워크트리와 변경을 보존하면서 목표·diff·검증 결과·실패 가설을 인계하는 절차입니다. 동일 파일의 쓰기 책임자는 한 명이며 기존 실행의 종료·정리가 불확실하면 새 쓰기 작업자를 시작하지 않습니다. 타임아웃을 종료 증거로 취급하지 않습니다. 해당 실행의 종료·settlement/release 상태 또는 확인된 프로세스 종료·잔여 쓰기 부재를 확인하고 필수 Orca 정리를 마쳐야 교체할 수 있습니다. 수동 종료도 대상·시점·방법과 가능한 런타임 상태를 대조하며 종료나 잔여 상태가 불확실하면 교체를 차단합니다.
 
@@ -359,4 +413,4 @@ Orca 정책이 있으면 업무 유형별 Gitflow 기준 워크트리·부모 �
 
 업데이트할 때 GitHub 변경 이력을 확인하고 해당 설치 파일을 다시 적용합니다. 기존 파일을 백업하고 관리 영역만 갱신하며 개인 지침, 관련 없는 설정과 프로젝트 보정은 보존합니다. 세션 시작 때마다 원격 파일을 다운로드하거나 실행하지 않습니다.
 
-대표 업무 10~15개로 첫 실행 성공률, 최종 정확성, 완료 시간, 모든 에이전트의 전체 사용량, 메인의 재작업, 승격 횟수와 통합 결함을 비교합니다. 이 저장소를 작성하면서 구현 벤치마크를 수행한 것은 아닙니다. 후보 모델의 성능 향상이 실제 업무 절약으로 이어지는지는 이 평가로 판단합니다.
+`python3 -B -m ai_policy.usage report`로 모델별 토큰·캐시 사용량과 작업 유형별 성공률·재시도·승격 횟수를 모읍니다. 대표 업무 10~15개로 첫 실행 성공률, 최종 정확성, 완료 시간, 모든 에이전트의 전체 사용량, 메인의 재작업, 승격 횟수와 통합 결함을 비교합니다. 이 저장소를 작성하면서 구현 벤치마크를 수행한 것은 아닙니다. 후보 모델의 성능 향상이 실제 업무 절약으로 이어지는지는 이 평가로 판단합니다.

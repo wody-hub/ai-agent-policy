@@ -1,6 +1,6 @@
 # Orca 프로젝트 공통 전략 설치 지시서
 
-버전: `orca-project-policy@v1.0.7` · 기준일: 2026-10-07
+버전: `orca-project-policy@v1.2.0` · 기준일: 2026-10-07 · 모델 라우팅 개편: 2026-11-06
 
 Codex와 Claude Code 어느 쪽에서도 사용할 수 있는 프로젝트별 설치 지시서입니다. 기존 전역 지침을 유지하면서, Gitflow 기준의 Orca 작업 워크트리와 도구 구분 없는 모델 배정 전략을 설치합니다.
 
@@ -24,7 +24,7 @@ Codex와 Claude Code 어느 쪽에서도 사용할 수 있는 프로젝트별 �
 너는 기존 프로젝트의 Orca AI 개발 환경 설치 담당자다. 다음 정책을 프로젝트별로 설치하고 검증해줘. 기존 Codex·Claude 전역 지침은 수정하지 않는다. 프로젝트의 소스 구조·아키텍처·라이브러리·API·DB를 임의로 변경하지 않는다.
 
 VERSION
-orca-project-policy@v1.0.7 (2026-10-07)
+orca-project-policy@v1.2.0 (2026-11-06, 비용 우선 모델 라우팅·프로젝트별 Controller)
 
 VARIABLES
 - PROJECT_ROOT: 현재 프로젝트. 여러 저장소를 묶는 상위 폴더일 수 있다.
@@ -82,8 +82,12 @@ POLICY A — Gitflow와 작업 위치 불변 조건
 
 POLICY B — 호스트에 중립적인 지휘와 실행
 - Main은 사용자 의도, 우선순위, 완료 조건, 최종 판단을 맡는다.
-- Controller는 Orca 조회, Gitflow 기준과 작업 위치 확인, 모델 선택, Worker 배정, 상태·결과 회수와 아래의 최소 Task 등록 부트스트랩만 맡는다. 필요할 때 호스트가 지원하는 별도 Controller를 사용하고 운영 체계를 중복 만들지 않는다.
-- Controller는 사용자가 명시한 에이전트·도구·모델·세션 지정을 우선한다. Codex나 특정 모델을 고정 Controller로 두지 않는다. 지정이 없으면 현재 요청을 받은 에이전트가 지원되는 범위에서 Main과 Controller를 겸할 수 있으며, 다른 Controller를 자동 생성하지 않는다.
+- Controller는 Orca 조회, Gitflow 기준과 작업 위치 확인, 모델 선택, Worker 배정, 상태·결과 회수와 아래의 최소 Task 등록 부트스트랩만 맡는다. 운영 체계를 중복 만들지 않는다.
+- 기본 구조는 Main → 프로젝트별 Controller → Orca Worker다(설치된 orca-orchestrator 스킬과 같은 구조). Orca 실행 목표가 있으면 Main은 Project·Goal마다 별도 Controller 하위 에이전트(POLICY C의 project_coordinator 경로, 기본 Sonnet 5.5 medium, Codex가 맡으면 Luna high)에 위임하고 사용자 대화·우선순위·최종 판단만 맡는다. 같은 Project·Goal의 활성 Controller가 있으면 재사용하고 중복 생성하지 않는다. 정책 설명·상태 조회처럼 실행 목표가 없는 요청에는 Controller·Run을 만들지 않는다.
+- Controller마다 자기 Run을 만든다(run-create). 이후 worker-start·task·check 명령에는 항상 `--run <자기 run_id>`를 붙인다. 하위 Controller는 Main과 같은 Orca 터미널 식별자를 공유하므로 Run 구분 없이 `check`하면 다른 Controller의 메일을 가져간다.
+- Controller는 Worker 시작 후 반복 조회 대신 지원되는 차단 대기 `check --run <run_id> --wait --timeout-ms <상한>`으로 결과를 받는다. 대기 상한이 지나면 상태를 확인해 다시 대기하거나 현재 상태를 Main에 반환한다. 2026-11-06 Orca 1.4.250 시험 실행에서 이 방식으로 worker_done을 받았고 Main은 깨워지지 않았다.
+- Main이 Orca 메일로 깨워지면 직접 처리하지 않고 메시지의 Run을 소유한 Controller에 전달한다(Claude는 기존 하위 에이전트에 메시지 전달, 지원하지 않는 호스트는 같은 Run으로 Controller를 재시작). 소유 Controller가 없으면 Main이 그 Run의 Controller를 새로 지정한다.
+- Controller는 사용자가 명시한 에이전트·도구·모델·세션 지정을 우선한다. Codex나 특정 모델을 고정 Controller로 두지 않는다. 지정이 없으면 위 기본 구조대로 Main이 프로젝트별 Controller 하위 에이전트를 만든다. 호스트가 하위 에이전트를 지원하지 않으면 그 제한을 보고하고, 사용자와 정한 경우에만 Main이 Controller를 겸한다.
 - 지정된 Controller의 설치·접근·Orca 조율 기능과 실제 세션·터미널 연결을 확인한다. 실행할 수 없거나 대상이 모호하면 해당 조율 시작·전환을 보류하고 필요한 정보나 대체 지정을 요청한다. Codex 등 다른 에이전트로 임의 대체하거나 실행 확인 없이 Controller 전환을 완료했다고 보고하지 않는다.
 - Controller 지정과 Worker 모델 선택은 별개다. POLICY C의 작업별 후보나 전역 메인 모델 기본값으로 사용자의 Controller 지정을 덮어쓰지 않는다. 실행 context와 인계 기록에 사용자 지정값, 확인한 Controller 도구·모델·세션, Main·Controller 겸임 여부를 구분해 남긴다. 진행 중 변경은 기존 조율 상태·미결 메시지·Worker 책임을 인계하고 실제 권한 연결을 확인한 뒤 적용하며 중복 지휘를 만들지 않는다.
 - 실제 업무 조사·구현·문서 작성·검증은 Orca가 관리하는 Worker에게 맡긴다. Orca Worker 대신 대화의 비관리 구현 서브에이전트를 사용하지 않는다. 단순 질의 응답·정책 읽기·조율·상태 조회에는 Worker 생성을 요구하지 않는다.
@@ -95,15 +99,24 @@ POLICY B — 호스트에 중립적인 지휘와 실행
 - Orca에서 수행하는 업무에만 이 실행·모델 배정 정책을 적용한다. Orca 밖에서는 기존 전역·프로젝트 규칙을 유지한다.
 - Orca 컨텍스트를 확인할 수 없으면 소스 수정 전에 실행 방식을 확인한다. 환경 변수 하나나 CLI가 설치돼 있다는 이유만으로 Orca 업무라고 판정하지 않는다.
 
-POLICY C — 역할별 모델 후보
-- 좁은 탐색·추출: Codex gpt-6-luna / medium, Claude Haiku 4.5. Haiku effort는 지정하지 않는다.
-- 명확한 기능 구현: Codex gpt-6-luna / high, Claude claude-sonnet-5-5 / medium.
-- 재현 가능한 버그·검증이 중요한 구현: Luna high, Sonnet 5.5 high.
-- 불명확한 진단·상태·동시성·복잡한 통합: gpt-6.1-sol high, claude-opus-5-5 high. 필요할 때만 xhigh.
-- 예외적 중요 판단: gpt-6-astra 또는 claude-fable-5-1. 판단의 난도와 지원 수준에 맞는 effort를 선택한다.
-- Astra·Fable을 일상 실행자나 모든 업무의 필수 상위 단계로 두지 않는다. 서로 다른 모델의 effort 이름과 성능을 동일하게 취급하지 않는다.
+POLICY C — 비용 우선 모델 라우팅 (정본: ai-agent-policy 저장소 policy/model-routing.json)
+- 기본 모델은 Sonnet과 Luna다. Opus·Sol은 승격 조건과 고위험 작업에만, Fable·Astra는 Opus·Sol까지 실패한 최종 단계에만 쓴다. 최우선 목표는 토큰 절약이고, 검증 수준은 낮추지 않는다.
+- 루트 오케스트레이터(Main)와 프로젝트 코디네이터(Controller)의 기본: Claude claude-sonnet-5-5 / medium, Codex가 맡으면 gpt-6-luna / high. 사용자가 지정한 Controller가 있으면 그 지정을 우선한다(POLICY B).
+- Worker 배정 전에 작업 복잡도를 분류한다.
+  - LEVEL 1 단순(이름 변경, 단순 수정, 문서, 테스트 작성, 정형 코드, 단순 UI, 기존 패턴 반복, 일반 코드 분석): Codex gpt-6-luna / medium. 대체 Sonnet 5.5.
+  - LEVEL 2 일반(기능, API, 데이터 로직, 프론트엔드, 일반 버그, 일반 코드 리뷰): Claude claude-sonnet-5-5 / medium. 대체 Luna high.
+  - LEVEL 3 복잡(다중 모듈, 상태 관리, 성능, 비동기, 통합, 복잡한 데이터 흐름, 아키텍처 설계): claude-sonnet-5-5 / high. 대체 Luna.
+  - LEVEL 4 고난도(중대한 구조 변경, 동시성, 반복 미해결 오류, 광범위 분석, 보안, 데이터 무결성): claude-opus-5-5 high 또는 gpt-6.1-sol high. 필요할 때만 xhigh.
+  - 좁은 탐색·추출: Luna medium 또는 Haiku 4.5(effort 미지정).
+  - LEVEL 5 최종 단계(LEVEL 4가 2회 실패한 문제만): claude-fable-5-1 high 또는 gpt-6-astra high. 시작 레벨·고위험 기본값·대체 모델로 쓰지 않는다.
+- 저장소 checkout이 있으면 `python3 -B -m ai_policy.routing --host orca --task-type <유형>`(또는 `--level`, `--failures`, `--failure-kind`, `--available`, `--resolved`) 결과의 `action`을 먼저 확인한다. `blocked_no_available_model`(종료 40)·`handoff_to_lead`(종료 41)는 Worker를 시작하지 않고 Main에 보고하며, 그 밖의 action이면 `orca_worker_args`를 worker-start에 사용한다. 결과 JSON을 선택 이유로 기록한다. 상위·최종 단계 모델은 `usage report` 추천이나 대체 모델로 선택하지 않는다. 명령을 쓸 수 없으면 위 표를 직접 적용한다.
+- 승격: 같은 Worker가 검증 실패·원인 미파악·복잡도 급증으로 2회 실패하면 한 단계 올린다(Luna → Sonnet → Opus/Sol). 구조 위험·요구사항 모순·데이터 무결성 위험은 즉시 LEVEL 4. 환경·권한·외부 서비스·테스트 환경·모델 접근 오류는 승격하지 않고 같은 모델로 상태를 보존해 해결한다. LEVEL 4에서 다시 2회 실패하면 LEVEL 5(Fable/Astra)로 올리고, LEVEL 5도 2회 실패하면 자동 승격을 멈추고 Main에 넘긴다.
+- 승격 인계는 전체 대화가 아니라 목표, 관련 파일, 현재 구현 상태, 오류, 시도 내용, 실패 가설, 필요한 판단만 전달한다. 상위 모델은 분석·핵심 결정 위주로 쓰고 구현은 가능하면 Sonnet·Luna Worker가 이어받는다. 해결 뒤 후속 Worker는 원래 LEVEL의 기본 모델로 돌아간다.
+- 사용 불가 모델은 설정의 대체 순서로 바꾸고 대체 사실을 기록한다. 대체 후보가 없으면 Worker를 시작하지 않고 작업 상태를 보존한 채 Main에 보고한다.
+- 토큰 절약: Worker에게 작업과 직접 관련된 파일·문서·설정만 전달하고, 이미 확보한 분석을 재사용하며, 같은 Goal의 Worker를 중복 생성하지 않는다. 나누는 비용이 더 크면 작업을 나누지 않는다. 끝난 Worker는 지원되는 방법으로 바로 정리하고 중간 보고는 짧게 한다. 동시 Worker는 3개, 동시 상위 모델 Worker는 1개 이하.
+- 서로 다른 모델의 effort 이름과 성능을 동일하게 취급하지 않는다.
 - 설치·접근·도구·실행 호스트가 맞는 후보만 남기고, 불명확성·결합·검증 가능성·실패 영향으로 역할을 정한다.
-- 유사 업무의 실제 성공 기록을 우선한다. 기록이 없으면 낮은 전체 비용으로 성공할 가능성이 높은 후보를 선택한다.
+- 유사 업무의 실제 성공 기록(`python3 -B -m ai_policy.usage report`의 추천 등)을 우선한다. 기록이 없으면 위 기본값을 쓴다. 완료한 Worker는 `ai_policy.usage record`로 작업 유형·모델·성공·검증·재시도·승격을 기록할 수 있다.
 - 브랜드별 고정 순위, 구현 언어만으로 정하는 우열, 문서·이미지 업무의 무조건적 특정 모델 선호는 만들지 않는다.
 - 실행·맥락 전달·재시도·검토·통합의 전체 비용을 고려한다. API 가격을 구독 크레딧과 동일하게 계산하지 않는다.
 - 작업별 선택 이유, agent 도구, model/effort 요청값, 확인된 실행값과 접근 미검증 항목을 기록한다.
@@ -130,6 +143,7 @@ POLICY E — 작업 권한·교체·완료
 - 기본은 Worker 1개다. 독립적인 작업만 3개 이하로 병렬화하고 실제 런타임 제한을 따른다. 같은 파일·DB 영역·공통 생성 산출물·API 계약은 분리하거나 순차 실행한다.
 - 다른 작업자의 변경을 되돌리지 않는다. 작업공간 격리만으로 DB·포트·외부 시스템이 격리된다고 가정하지 않는다.
 - 동일 실행자가 같은 원인에 대해 수행하는 구현·수정은 최초 시도와 새로운 증거·다른 가설에 따른 추가 수정 1회, 총 2회까지다. 두 번째 실패 후 자동 재시도를 중단하고 증거를 책임자에게 전달한다. 책임자는 재진단 후 새 근거·가설·검증 계획으로 추가 실행 여부를 결정한다. 모델 교체만으로 시도 횟수를 초기화하지 않는다. 이미 책임자가 실행 중이면 자체 재진단 또는 필요한 독립 자문을 수행하며 동일 역할로 형식적 승격하지 않는다. 구조적 위험·요구사항 모순·데이터 무결성 위험은 즉시 책임자에게 전달한다.
+- Orca 실행 재시도: 도구·환경·권한·외부 서비스·Worker 중단처럼 모델 판단이 아닌 실행 실패는 같은 원인에 대해 최초 실행을 포함해 최대 3회까지 같은 모델로 상태를 보존하며 재실행한다. 3회째도 실패하면 모델을 승격하지 않고 증거를 Main에 넘긴다. 모델 판단 실패(검증 실패·원인 미파악·복잡도 급증)의 승격 기준은 위와 같이 2회다.
 - 도구·권한·환경 문제와 모델 추론 문제를 구분한다. 필요한 전문 역할로 바로 이동할 수 있으며 모델을 모두 순서대로 거치지 않는다.
 - 모델 계열 교체 시 기존 워크트리와 변경을 보존하고 목표, diff, 테스트 결과, 시도·가설·남은 문제를 인계한다.
 - 기존 작업자의 실행·정리가 불확실하면 새로운 쓰기 작업자를 띄우지 않는다. Orca의 Dispatch·settlement·재사용/retention/release 절차를 따른다. 종료 증거는 해당 실행 ID에 연결된 종료·settlement/release 상태 또는 확인된 프로세스 종료다. 어느 경우에도 관련 하위 실행·잔여 쓰기 작업 부재와 필수 정리를 확인해야 한다. 사용자가 수동 종료했다면 대상 실행 ID·종료 시점·방법을 확인하고 가능한 런타임/프로세스 상태와 대조한다. 단순 타임아웃·터미널 창 닫힘·근거 없는 종료 선언은 증거가 아니다. 필수 Orca 정리 절차를 생략하지 않으며 런타임 신호가 없으면 확인 가능한 대체 증거와 잔여 상태를 기록한다. 종료·잔여 쓰기 부재나 필수 정리를 확인할 수 없으면 교체를 차단한다.
@@ -141,7 +155,7 @@ POLICY E — 작업 권한·교체·완료
 PHASE 2 — 문서와 루트 진입 연결
 1. 기존 AI_CONTEXT.md, PROJECT_RULES.md, BUILD_AND_TEST.md, ORCA_WORKFLOW.md를 우선 재사용한다. 없으면 설치에 필요한 실제 근거만 조사하고 부족한 항목을 UNKNOWN으로 기록한다.
 2. POLICY_DIR에 ORCA_POLICY.md, MODEL_ROUTING.md, WORKTREE_RULES.md, INSTALLATION.md를 생성한다. 위 정책을 프로젝트의 실제 경로·검증된 명령·모델 후보에 맞춰 작성한다.
-3. 문서 첫 줄에 generated-by: orca-project-policy@v1.0.7과 생성일을 주석으로 기록하고, 마지막에 프로젝트 보정 섹션을 둔다. GENERATED.md에 상대 경로·버전·생성일·보정 상태를 기록한다. 기존 산출물 행을 보존한다.
+3. 문서 첫 줄에 generated-by: orca-project-policy@v1.2.0과 생성일을 주석으로 기록하고, 마지막에 프로젝트 보정 섹션을 둔다. GENERATED.md에 상대 경로·버전·생성일·보정 상태를 기록한다. 기존 산출물 행을 보존한다.
 4. 미추적 AGENTS.md와 CLAUDE.md에는 orca-project-policy:begin/end 관리 블록만 추가하거나 갱신한다. 기존 추적 진입 파일은 위 비추적 계약에 따라 지원되는 로컬 진입·설정으로 분리한다. 기존 진입 파일과 내용을 보존한다. 적용되지 않는 AGENTS.override.md나 프로젝트 설정이 있는지도 확인한다.
 5. CLAUDE.md는 상대 경로의 @import로 핵심 정책을 연결한다. AGENTS.md에는 첫 업무 행동으로 핵심 정책을 실제로 끝까지 읽고 적용하라는 규칙과 상대 경로를 둔다. Markdown 링크가 자동 import라고 가정하지 않는다.
 6. 여러 저장소에서는 설치 정책 정본을 확인한 로컬 정책 위치에 두고 각 저장소에는 버전이 고정된 미추적 정책 사본 또는 검증된 로컬 스냅샷과 진입 연결을 설치한다. 원본 지시서의 버전·해시와 로컬 경로를 확인한다. 다른 작업 워크트리의 변경 가능한 문서를 직접 참조하지 않는다.
@@ -188,9 +202,9 @@ FINAL REPORT
 공통 workspace
 └── 대상 저장소
     └── dev
-        ├── task-a  → Codex / Luna
-        ├── task-b  → Claude Code / Sonnet
-        └── task-c  → Sol 또는 Opus 전문 작업
+        ├── task-a  → Codex / Luna (LEVEL 1)
+        ├── task-b  → Claude Code / Sonnet (LEVEL 2·3)
+        └── task-c  → Opus 또는 Sol (승격·고위험만)
 ```
 
 작업자의 도구는 지휘자의 도구와 달라도 됩니다. 모델 선택과 Git 기준, Orca 부모 관계, 실제 실행 호스트는 각각 검증합니다. 이 지시서를 다시 실행할 때는 설치 버전과 변경 diff를 확인하고 프로젝트 보정 내용을 유지하세요.
