@@ -12,7 +12,7 @@
   "installer_schema": 1,
   "installer_version": "0.1.0",
   "schema": 1,
-  "source_commit": "e6c6a8e07371a15a48dba2210a18ddb2a78f2544",
+  "source_commit": "703cab7fde6c832368c8e266af6ae6bd622d268e",
   "source_hashes": {
     "README.md": "b81cb6562bfaa567ac351b995b6a507e207729a8cbec0043005398c1377873c4",
     "claude-code-global-model-routing-prompt.md": "76bf5a2b86f3796e90d00617bec8da33c085f669221123fe755619367b296b38",
