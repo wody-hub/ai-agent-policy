@@ -4,7 +4,7 @@ TASK_ID: `2026-11-10-global-orca-routing-install`
 
 ## Purpose
 
-Apply the approved lightweight Orca Main/Controller routing policy to the actual Codex and Claude global instruction files while preserving all unrelated instructions and existing file permissions.
+Apply the approved lightweight Orca Main/Controller routing policy to the actual Codex and Claude global instruction files and align both installed Orca orchestration skill copies with the approved conditional Controller rule, preserving unrelated instructions and file permissions.
 
 ## Source and approval
 
@@ -18,15 +18,15 @@ Apply the approved lightweight Orca Main/Controller routing policy to the actual
 - Create private backups before mutation; preserve unrelated file contents, ownership and modes.
 - Verify the intended policy text, managed-block boundaries, and preservation of all out-of-scope content after installation.
 - Do not change model-routing rules outside the requested Orca coordinator simplification, hooks, agents, credentials, settings, project source, or GH project policy.
-- GH project policy is a separate project and requires its own Controller, Task, dev child worktree, and installation procedure; it is not part of this task.
+- GH project policy is a separate project and requires its own Task/worktree and installation procedure; it is not part of this task.
 
 ## Acceptance criteria
 
-1. Both actual global files contain the approved rule: Main may act as Controller for one short, low-risk project goal with one Worker; use a separate Controller for multi-project, parallel, long-running, high-risk, or complex coordination; managed Workers perform actual work.
+1. Both actual global files and both installed Orca skill copies contain the approved policy text.
 2. Only the relevant managed policy sections change; unrelated instructions remain byte-identical.
 3. Backups preserve the original bytes and modes, and both installed files retain their original modes and ownership.
 4. Static checks confirm no duplicate or malformed managed markers and verify the installed policy text against its source.
-5. Report exact paths, backup locations, verification commands/results, and any unsupported runtime-loading behavior.
+5. Record exact changed paths, private backup locations in local evidence only, verification commands/results, and runtime-loading/upstream-source limitations.
 
 ## Repository and worktree mapping
 
@@ -38,19 +38,17 @@ The task branch is an Orca-managed direct child of the verified `dev` worktree. 
 
 ## Completion record
 
-- Status: installed and statically verified on 2026-11-10 by the Orca Worker.
-- Change: in each global file, the managed block's Orca paragraph had one span (the fixed "Main → per-project Controller → Workers" structure, Controller-owned Run, and mail forwarding) replaced in place. The new text renders the approved source bullet (`codex-global-model-routing-prompt.md` line 66, `claude-code-global-model-routing-prompt.md` line 77) in the block's existing concise English style. It keeps the existing `orca-orchestrator`, Controller model, and `check --wait` details. The retry sentence and every other byte are unchanged.
-- Wording is a rendering, not a verbatim copy: the source prompts contain only the Korean rule and tell the installer to reflect it concisely in English. Each clause maps to the source: conditional Main-as-Controller, Workers do the actual work, separate Controller criteria, one Run owner with `--run`, and message routing by owner.
-- Validation (no tests run, as instructed):
-  - Exact-match check before writing: old span ×1, new span ×0, no CR bytes in either file.
-  - After writing: the bytes before and after the replaced span are identical to the backup, and reversing the substitution reproduces the backup exactly. `diff` shows one changed line per file.
-  - Managed start/end markers: one of each per file; the new text sits inside the managed block.
-  - Mode, owner, inode, link count, xattrs, LF line endings, and the trailing newline are unchanged (Codex 644, Claude 600).
-  - Backups are byte-identical (`cmp`) with matching sha256 and preserved modes. They are stored privately in the local task-artifact area; paths and hashes are in local execution evidence only.
-- Shadowing: no Codex override file, no Claude local global file, and no config-dir environment overrides were found.
-- Remaining limits:
-  - The installed `orca-orchestrator` skill (both Claude and Codex copies, line 23) still says every Project·Goal goes to a separate Controller. That conflicts with the new rule. Skills were out of scope, so it needs a separate approved change.
-  - The managed-block header dates were not changed.
-  - Runtime loading was not verified: no new model session was started. Existing sessions keep the old text until a new session loads the files (`/context` in Claude Code; a new Codex session).
-- Local Task-document commit: Task docs only; global files and private evidence are not committed.
-- Push, merge, and deployment: not authorized by this task.
+- Status: global instructions and installed skill copies updated and statically verified on 2026-11-10; runtime loading not verified.
+- Approved scope extension: in addition to the two global instruction files, update both installed `orca-orchestrator/SKILL.md` copies to align with the approved policy. Detailed wording and machine-local target paths are recorded only in private execution evidence.
+- Global instruction changes and prior validation: see the preceding installation record in local execution evidence; the existing global files were not modified during this skill alignment task.
+- Skill changes: approved alignment updates were applied to both installed skill copies, including the approved mail-ownership clarification. Both installed skill files are byte-identical after the edits; detailed hashes and metadata are recorded only in private execution evidence.
+- Validation (no tests run): exact before/after review confirms only the two intended bullets changed; both copies compare equal and have the same SHA-256; private backups compare byte-for-byte with the original files and retain mode 644. Global-file checks remain as documented in private execution evidence. Historical `.bak-20261106-cost-routing` files were not modified.
+- Private backup paths and detailed validation evidence are recorded only in `.local-artifacts/tasks/2026-11-10-global-orca-routing-install/` and are not committed.
+- Source limitation: the installed skill has no tracked upstream source in this repository or `~/.agents/skills`; changes apply to the two installed copies only.
+- Runtime limitation: no app/session or runtime hook was launched. Runtime loading remains unverified; a new session may be required to load the updated skill and global instruction files.
+- Tests: not run, as requested. No servers or background processes were started.
+- Push, merge, and deployment: not performed.
+
+### Approved mail-ownership clarification — 2026-11-10
+
+- The user approved and both installed skill copies received a minimal mail-ownership clarification. This resolved the earlier skill conflict recorded in private execution evidence. Exact target details and validation remain private.
