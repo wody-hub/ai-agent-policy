@@ -1,6 +1,6 @@
 # Claude Code 공통 모델 운영 전략 적용 프롬프트
 
-작성일: 2026-10-07 · 갱신: 2026-11-06 · 전략 버전: 1.3.0 (비용 우선: 기본 Sonnet, 승격 시 Opus, 최종 단계 Fable, Orca 프로젝트별 Controller)
+작성일: 2026-10-07 · 갱신: 2026-11-12 · 전략 버전: 1.4.0 (비용 우선: 기본 Sonnet, 승격 시 Opus, 최종 단계 Fable, Codex 세대 자동 탐색)
 
 아래 코드 블록 전체를 자신의 Claude Code에 입력하세요. 이 파일 하나로 적용할 수 있습니다. 전략과 근거는 [README의 Claude Code 전략](README.md#claude-code-전략)에 정리되어 있습니다. 실행하면 전역 지침·관련 설정·개인 에이전트 정의를 백업하고 변경합니다. 이 문서를 읽는 것만으로 설정이 변경되지는 않습니다.
 
@@ -74,7 +74,7 @@
 
 검토와 안전:
 - Orca 프로젝트 정책이 설치되고 Orca 업무 context가 확인되면 실행 위치·Main/Controller/Worker 역할·교차 도구 모델 선택·최소 Task 등록 부트스트랩은 그 정책을 따른다. 작은 업무 직접 실행은 관리되는 Worker에게 적용하며 Worker의 재위임은 명시적 승인과 추적 가능한 실행에 한정한다. 고위험 분석은 선택한 Sol high 또는 Opus high가 맡고 위험에 따라 독립 검토를 추가한다. 상위 지침의 제한은 보존한다. Orca 밖에서는 이 전역 전략을 유지한다.
-- Orca 업무의 기본 구조는 Main → 프로젝트별 Controller 하위 에이전트 → Orca Worker다. Controller는 자기 Run을 만들고 모든 명령에 `--run`을 붙이며 `check --run <id> --wait`로 결과를 받는다. Main이 Orca 메일로 깨워지면 해당 Run의 Controller에 넘긴다. Orca 실행 재시도(도구·환경·Worker 중단)는 같은 원인에 최대 3회, 모델 판단 실패의 승격 기준은 2회다.
+- Orca 업무는 단일 프로젝트·단일 Worker·짧고 동기적인 저위험 목표라면 Main이 Controller 역할을 겸해 Orca Worker 하나를 직접 조율한다. 실제 조사·구현·검증은 계속 관리 Worker가 수행한다. 복수 프로젝트, 병렬 Worker, 장기 실행, 고위험·복잡한 조율에는 프로젝트별 Controller를 둔다. 어느 경로든 Run 소유자를 하나로 정하고 worker-start·task·check에 해당 `--run`을 사용한다. Main이 Run 소유자이면 Orca 메시지를 직접 확인하고, 별도 Controller가 소유하면 해당 Controller에 전달한다. Orca 실행 재시도(도구·환경·Worker 중단)는 같은 원인에 최대 3회, 모델 판단 실패의 승격 기준은 2회다.
 - 프로젝트에 Task 정책이 설치돼 있으면 업무 ID·실제 브랜치 매핑·문서 기록·완료 게이트를 따른다. 이 전역 모델 정책 설치 자체가 Task 정책이나 Orca 설치를 요구하지는 않는다.
 - 완료 보고에는 변경 사항, 실제 검증 명령과 결과, 남은 위험을 포함한다.
 - 메인은 완료 조건, 관련 diff, 검증 근거, 통합 동작을 확인한다.
@@ -95,7 +95,7 @@
 영구 적용 방법:
 1. 변경 대상 파일을 백업하고 관련 없는 개인 지침, 설정, 플러그인, 훅과 권한은 보존한다.
 2. 사용자 전역 CLAUDE.md에 아래 관리 영역을 사용해 전략을 간결하게 반영한다. 이미 있다면 중복 추가하지 않고 해당 영역만 갱신한다.
-   <!-- ai-agent-policy:claude:start version=1.3.0 -->
+   <!-- ai-agent-policy:claude:start version=1.4.0 -->
    <!-- ai-agent-policy:claude:end -->
 3. 기존 모델 라우팅 지침이 새 전략과 충돌하면 관련 부분을 교체한다. 프로젝트별 지침은 임의로 대량 수정하지 않는다.
 4. 사용자 settings.json의 model을 실제 접근 가능한 claude-sonnet-5-5로 설정한다. 현재 버전의 지원 형식을 확인하여 modelSettings 등 모델별 추론 설정에 Sonnet medium, Opus high를 저장한다.

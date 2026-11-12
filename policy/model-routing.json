@@ -1,16 +1,22 @@
 {
   "schema": 1,
-  "version": "1.3.0",
-  "verified_on": "2026-11-06",
-  "notes": "Model IDs were checked against the installed Codex models_cache.json and Claude Code settings on verified_on. Re-verify before changing. Prices are intentionally null until an approved source is recorded; null means the cost estimate is reported as not collected.",
+  "version": "1.4.0",
+  "verified_on": "2026-11-12",
+  "notes": "Codex Luna/Sol/Astra resolve to the highest visible, API-supported generation in the installed models_cache.json matching codex_family when fetched within 30 days; the family resolver also supports Terra for project-specific routes. id is the last-known fallback when the cache is missing, stale, or has no match. The resolver reads but never refreshes that cache. Claude and Fable IDs remain version-pinned. Prices are intentionally null until an approved source is recorded; null means the cost estimate is reported as not collected.",
   "models": {
-    "luna":   {"tool": "codex",  "agent": "codex",  "id": "gpt-6-luna",                "tier": "economy", "efforts": ["low", "medium", "high", "xhigh", "max"], "enabled": true},
+    "luna":   {"tool": "codex",  "agent": "codex",  "id": "gpt-6-luna",                "codex_family": "luna", "tier": "economy", "efforts": ["low", "medium", "high", "xhigh", "max"], "enabled": true},
     "sonnet": {"tool": "claude", "agent": "claude", "id": "claude-sonnet-5-5",         "tier": "standard", "efforts": ["low", "medium", "high", "xhigh", "max"], "enabled": true},
     "haiku":  {"tool": "claude", "agent": "claude", "id": "claude-haiku-4-5-20251001", "tier": "economy", "efforts": [], "enabled": true, "lookup_only": true},
     "opus":   {"tool": "claude", "agent": "claude", "id": "claude-opus-5-5",           "tier": "premium", "efforts": ["low", "medium", "high", "xhigh", "max"], "enabled": true},
-    "sol":    {"tool": "codex",  "agent": "codex",  "id": "gpt-6.1-sol",               "tier": "premium", "efforts": ["low", "medium", "high", "xhigh", "max", "ultra"], "enabled": true},
-    "astra":  {"tool": "codex",  "agent": "codex",  "id": "gpt-6-astra",               "tier": "exceptional", "efforts": ["low", "medium", "high", "xhigh", "max", "ultra"], "enabled": true},
+    "sol":    {"tool": "codex",  "agent": "codex",  "id": "gpt-6.1-sol",               "codex_family": "sol", "tier": "premium", "efforts": ["low", "medium", "high", "xhigh", "max", "ultra"], "enabled": true},
+    "astra":  {"tool": "codex",  "agent": "codex",  "id": "gpt-6-astra",               "codex_family": "astra", "tier": "exceptional", "efforts": ["low", "medium", "high", "xhigh", "max", "ultra"], "enabled": true},
     "fable":  {"tool": "claude", "agent": "claude", "id": "claude-fable-5-1",          "tier": "exceptional", "efforts": ["low", "medium", "high", "xhigh", "max"], "enabled": true, "access_verified_on": "2026-11-06"}
+  },
+  "codex_model_families": {
+    "luna": "gpt-6-luna",
+    "sol": "gpt-6.1-sol",
+    "astra": "gpt-6-astra",
+    "terra": "gpt-6.1-terra"
   },
   "hosts": {
     "orca":   {"tools": ["claude", "codex"], "description": "Confirmed Orca task: Controller may assign either tool per worker."},

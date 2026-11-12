@@ -104,6 +104,69 @@ class RoutingTests(unittest.TestCase):
         self.assertEqual(r(host='orca', task_type='docs')['orca_worker_args'], ['--agent','codex','--model','gpt-6-luna','--effort','medium'])
         self.assertEqual(r(host='claude', role='lookup')['orca_worker_args'], ['--agent','claude','--model','claude-haiku-4-5-20251001'])
 
+    def test_codex_family_uses_newest_supported_cached_generation(self):
+        catalog=[
+            {'slug':'gpt-6-luna','visibility':'list','supported_in_api':True},
+            {'slug':'gpt-7.1-luna','visibility':'list','supported_in_api':True},
+            {'slug':'gpt-7.2.1-luna','visibility':'list','supported_in_api':True},
+            {'slug':'gpt-9-luna','visibility':'hide','supported_in_api':True},
+            {'slug':'gpt-10-luna','visibility':'list','supported_in_api':False},
+        ]
+        x=routing.route(C, host='codex', task_type='docs', model_catalog=catalog)
+        self.assertEqual(x['model'], 'gpt-7.2.1-luna')
+        self.assertEqual(x['model_resolution'], 'codex_catalog')
+        self.assertEqual(x['orca_worker_args'], ['--agent','codex','--model','gpt-7.2.1-luna','--effort','medium'])
+
+    def test_codex_family_catalog_falls_back_to_pinned_id_when_no_match(self):
+        x=routing.route(C, host='codex', task_type='docs', model_catalog=[
+            {'slug':'gpt-7.1-sol','visibility':'list','supported_in_api':True},
+            {'slug':'gpt-8-luna','visibility':'list','supported_in_api':False},
+        ])
+        self.assertEqual(x['model'], 'gpt-6-luna')
+        self.assertEqual(x['model_resolution'], 'pinned_fallback')
+
+    def test_explicit_availability_must_include_resolved_generation(self):
+        x=routing.route(C, host='codex', task_type='docs', available=['gpt-6-luna'], model_catalog=[
+            {'slug':'gpt-7-luna','visibility':'list','supported_in_api':True},
+        ])
+        self.assertEqual(x['action'], 'blocked_no_available_model')
+
+    def test_stale_codex_catalog_does_not_claim_current_generation(self):
+        catalog={'fetched_at':'2000-01-01T00:00:00Z','models':[
+            {'slug':'gpt-8-luna','visibility':'list','supported_in_api':True},
+        ]}
+        x=routing.route(C, host='codex', task_type='docs', model_catalog=catalog)
+        self.assertEqual((x['model'], x['model_resolution']), ('gpt-6-luna','pinned_fallback'))
+
+    def test_fresh_timestamped_codex_catalog_resolves_generation(self):
+        from datetime import datetime, timezone
+        catalog={'fetched_at':datetime.now(timezone.utc).isoformat(),'models':[
+            {'slug':'gpt-8-luna','visibility':'list','supported_in_api':True},
+        ]}
+        x=routing.route(C, host='codex', task_type='docs', model_catalog=catalog)
+        self.assertEqual((x['model'], x['model_resolution']), ('gpt-8-luna','codex_catalog'))
+
+    def test_resolve_family_preserves_project_selected_codex_family(self):
+        x=routing.resolve_codex_family(C, 'terra', model_catalog=[
+            {'slug':'gpt-6.1-terra','visibility':'list','supported_in_api':True},
+            {'slug':'gpt-7.2.1-terra','visibility':'list','supported_in_api':True},
+        ], effort='high')
+        self.assertEqual(x['action'], 'run')
+        self.assertEqual((x['model'], x['model_resolution']), ('gpt-7.2.1-terra','codex_catalog'))
+        self.assertEqual(x['orca_worker_args'], ['--agent','codex','--model','gpt-7.2.1-terra','--effort','high'])
+
+    def test_cli_reads_explicit_model_catalog(self):
+        from datetime import datetime, timezone
+        with tempfile.TemporaryDirectory() as d:
+            p=Path(d)/'models.json'
+            p.write_text(json.dumps({'fetched_at':datetime.now(timezone.utc).isoformat(), 'models':[{'slug':'gpt-7-luna','visibility':'list','supported_in_api':True}]}))
+            b=io.StringIO()
+            with contextlib.redirect_stdout(b):
+                code=routing.main(['--host','codex','--task-type','docs','--model-catalog',str(p)])
+            result=json.loads(b.getvalue())
+        self.assertEqual(code, 0)
+        self.assertEqual((result['model'], result['model_resolution']), ('gpt-7-luna','codex_catalog'))
+
     def test_errors(self):
         for kw, code in (({'host':'x','task_type':'docs'}, 'unknown_host'), ({'host':'orca','task_type':'nope'}, 'unknown_task_type'),
                          ({'host':'orca','task_type':'docs','failure_kind':'zzz'}, 'unknown_failure_kind'), ({'host':'orca'}, 'invalid_selector'),
@@ -125,6 +188,7 @@ class RoutingTests(unittest.TestCase):
         bad(lambda c: c['levels']['1'].update(orca=['luna','ultra']))
         bad(lambda c: c['levels']['1'].update(orca=['ghost','low']))
         bad(lambda c: c['roles']['lookup'].update(claude=['haiku','high']))
+        bad(lambda c: c['models']['luna'].update(codex_family='../luna'))
         bad(lambda c: c.pop('fallbacks'))
         bad(lambda c: c.update(schema=2))
 

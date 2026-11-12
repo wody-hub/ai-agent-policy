@@ -1,12 +1,15 @@
 """Config-driven model routing: pick model/effort by task level, failures and availability."""
 import argparse
+from datetime import datetime, timedelta, timezone
 import json
+import os
 from pathlib import Path
+import re
 
 from .bundle import PolicyError
 
 DEFAULT_CONFIG=Path(__file__).resolve().parent.parent/'policy'/'model-routing.json'
-REQUIRED=('models','hosts','roles','levels','task_types','escalation','fallbacks','limits')
+REQUIRED=('models','codex_model_families','hosts','roles','levels','task_types','escalation','fallbacks','limits')
 PRESERVE={'retry','escalate','handoff_to_lead','blocked_no_available_model','retry_same_model_preserve_state'}
 
 def _bad():
@@ -25,6 +28,9 @@ def load_config(path=None):
     if not isinstance(c, dict) or c.get('schema')!=1 or any(not isinstance(c.get(k), dict) for k in REQUIRED): _bad()
     for m in c['models'].values():
         if not isinstance(m, dict) or not all(k in m for k in ('tool','id','tier','efforts','enabled')): _bad()
+        family=m.get('codex_family')
+        if family is not None and (m['tool']!='codex' or not isinstance(family, str) or not re.fullmatch(r'[a-z0-9]+', family) or c['codex_model_families'].get(family)!=m['id']): _bad()
+    if any(not isinstance(k, str) or not re.fullmatch(r'[a-z0-9]+', k) or not isinstance(v, str) or not v for k,v in c['codex_model_families'].items()): _bad()
     hosts=c['hosts']
     for group in ('levels','roles'):
         for entry in c[group].values():
@@ -42,9 +48,57 @@ def load_config(path=None):
     if any(k not in c['escalation'] for k in ('reasoning_failures_before_escalation','counted_failure_kinds','immediate_failure_kinds','non_model_failure_kinds','handoff_fields')): _bad()
     return c
 
-def _usable(config, host, alias, available):
+def _catalog_id(model, catalog):
+    family=model.get('codex_family')
+    if not family: return None
+    if isinstance(catalog, dict):
+        try:
+            fetched=datetime.fromisoformat(catalog['fetched_at'].replace('Z','+00:00'))
+            if fetched.tzinfo is None: fetched=fetched.replace(tzinfo=timezone.utc)
+            age=datetime.now(timezone.utc)-fetched.astimezone(timezone.utc)
+            if age>timedelta(days=30) or age<timedelta(minutes=-5): return None
+        except (KeyError, TypeError, ValueError): return None
+        catalog=catalog.get('models')
+    if not isinstance(catalog, list): return None
+    pattern=re.compile(r'^gpt-(\d+(?:\.\d+)*?)-'+re.escape(family)+r'$')
+    candidates=[]
+    for item in catalog:
+        if not isinstance(item, dict) or item.get('visibility')!='list' or item.get('supported_in_api') is not True: continue
+        slug=item.get('slug')
+        match=pattern.fullmatch(slug) if isinstance(slug, str) else None
+        if match:
+            candidates.append((tuple(int(part) for part in match.group(1).split('.')), slug))
+    return max(candidates)[1] if candidates else None
+
+def load_codex_model_catalog(path=None):
+    """Read Codex's installed model cache without fetching or updating it."""
+    root=Path(os.environ.get('CODEX_HOME') or Path.home()/'.codex')
+    p=Path(path) if path else root/'models_cache.json'
+    try:
+        if p.stat().st_size > 8*1024*1024: return None
+        data=json.loads(p.read_text(encoding='utf-8'))
+    except (OSError, ValueError): return None
+    models=data.get('models') if isinstance(data, dict) else None
+    return {'fetched_at':data.get('fetched_at'),'models':models} if isinstance(models, list) else None
+
+def _resolved_model(model, catalog):
+    selected=_catalog_id(model, catalog)
+    if selected: return selected, 'codex_catalog'
+    return model['id'], 'pinned_fallback' if model.get('codex_family') else 'pinned'
+
+def resolve_codex_family(config, family, *, model_catalog=None, effort=None):
+    """Resolve a project-selected Codex family to its current exact model id."""
+    pinned=config['codex_model_families'].get(family)
+    if pinned is None: raise PolicyError('unknown_model_family')
+    if effort is not None and effort not in ('low','medium','high','xhigh','max','ultra'): raise PolicyError('unknown_effort')
+    model_id, resolution=_resolved_model({'id':pinned,'codex_family':family}, model_catalog)
+    return {'schema':1,'action':'run','alias':family,'tool':'codex','agent':'codex','model':model_id,'model_resolution':resolution,'effort':effort,
+            'reasons':['model_resolution:'+resolution],
+            'orca_worker_args':['--agent','codex','--model',model_id]+(['--effort',effort] if effort else [])}
+
+def _usable(config, host, alias, available, model_id):
     m=config['models'][alias]
-    return bool(m['enabled']) and m['tool'] in config['hosts'][host]['tools'] and (available is None or alias in available or m['id'] in available)
+    return bool(m['enabled']) and m['tool'] in config['hosts'][host]['tools'] and (available is None or alias in available or model_id in available)
 
 def _effort(m, want):
     ef=m['efforts']
@@ -52,7 +106,7 @@ def _effort(m, want):
     if want in ef: return want
     return 'medium' if 'medium' in ef else ef[len(ef)//2]
 
-def route(config, *, host, level=None, task_type=None, role=None, failures=0, failure_kind=None, available=None, resolved=False):
+def route(config, *, host, level=None, task_type=None, role=None, failures=0, failure_kind=None, available=None, resolved=False, model_catalog=None):
     """LEVEL 5 (exceptional tier) is reachable only by escalation from LEVEL 4, never as a starting level."""
     if host not in config['hosts']: raise PolicyError('unknown_host')
     if (role is not None)==(task_type is not None or level is not None): raise PolicyError('invalid_selector')
@@ -111,26 +165,27 @@ def route(config, *, host, level=None, task_type=None, role=None, failures=0, fa
         for a, e in cands:
             if a in seen or (config['models'][a]['tier']=='exceptional' and cur!=top): continue
             seen.add(a)
-            if _usable(config, host, a, available):
-                if a==palias: chosen=(a, e)
+            model_id, model_resolution=_resolved_model(config['models'][a], model_catalog)
+            if _usable(config, host, a, available, model_id):
+                if a==palias: chosen=(a, e, model_id, model_resolution)
                 else:
                     # A fallback takes the effort that model is assigned at this level on another host, if any.
                     same=[x[1] for x in (lv or {}).values() if isinstance(x, list) and x and x[0]==a]
-                    chosen=(a, same[0] if same and (same[0] is None or same[0] in config['models'][a]['efforts']) else _effort(config['models'][a], e))
+                    chosen=(a, same[0] if same and (same[0] is None or same[0] in config['models'][a]['efforts']) else _effort(config['models'][a], e), model_id, model_resolution)
                 break
             if a==palias: reasons.append('model_unavailable:'+a)
         if chosen and chosen[0]!=palias: fallback_used=True
     out={'schema':1,'host':host,'level':cur,'level_name':lv['name'] if lv else None,'task_type':task_type,'role':role,
-         'alias':None,'tool':None,'agent':None,'model':None,'effort':None,'tier':None,'action':action,'escalated':escalated,
+         'alias':None,'tool':None,'agent':None,'model':None,'model_resolution':None,'effort':None,'tier':None,'action':action,'escalated':escalated,
          'fallback_used':fallback_used,'high_risk':high_risk,'human_gate':high_risk,'premium':False,'preserve_state':False,
          'attempts_reset':bool(esc.get('attempt_count_resets_on_model_change', False)),'reasons':reasons,'handoff_fields':[],'orca_worker_args':[]}
     if chosen is None:
         out['action']=action='blocked_no_available_model'; reasons.append('no_available_model')
     else:
-        a, e=chosen; m=config['models'][a]
-        out.update(alias=a, tool=m['tool'], agent=m['agent'], model=m['id'], effort=e, tier=m['tier'],
+        a, e, model_id, model_resolution=chosen; m=config['models'][a]
+        out.update(alias=a, tool=m['tool'], agent=m['agent'], model=model_id, model_resolution=model_resolution, effort=e, tier=m['tier'],
                    premium=m['tier'] in config['limits'].get('premium_tiers', ()),
-                   orca_worker_args=['--agent', m['agent'], '--model', m['id']]+(['--effort', e] if e else []))
+                   orca_worker_args=['--agent', m['agent'], '--model', model_id]+(['--effort', e] if e else []))
     if action=='handoff_to_lead': out['orca_worker_args']=[]  # stop: nothing further to launch automatically
     out['preserve_state']=action in PRESERVE
     if action in ('escalate','handoff_to_lead'): out['handoff_fields']=list(esc['handoff_fields'])
@@ -142,12 +197,25 @@ def main(argv=None):
     p.add_argument('--task-type'); p.add_argument('--level', type=int); p.add_argument('--role')
     p.add_argument('--failures', type=int, default=0); p.add_argument('--failure-kind')
     p.add_argument('--available'); p.add_argument('--resolved', action='store_true')
+    p.add_argument('--model-catalog', help='Codex model cache JSON; defaults to CODEX_HOME/models_cache.json')
+    p.add_argument('--resolve-family', help='Resolve a project-selected Codex family without changing its tier or effort')
+    p.add_argument('--effort', choices=('low','medium','high','xhigh','max','ultra'))
     p.add_argument('--config')
     a=p.parse_args(argv)
     try:
-        r=route(load_config(a.config), host=a.host, level=a.level, task_type=a.task_type, role=a.role, failures=a.failures,
+        config=load_config(a.config)
+        model_catalog=load_codex_model_catalog(a.model_catalog)
+        if a.resolve_family:
+            if any((a.task_type,a.level,a.role,a.failures,a.failure_kind,a.resolved,a.available)):
+                raise PolicyError('invalid_selector')
+            if a.host not in config['hosts']: raise PolicyError('unknown_host')
+            if 'codex' not in config['hosts'][a.host]['tools']: raise PolicyError('unsupported_host')
+            result=resolve_codex_family(config,a.resolve_family,model_catalog=model_catalog,effort=a.effort)
+            print(json.dumps(result, sort_keys=True)); return 0
+        if a.effort is not None: raise PolicyError('invalid_selector')
+        r=route(config, host=a.host, level=a.level, task_type=a.task_type, role=a.role, failures=a.failures,
                 failure_kind=a.failure_kind, available=[x for x in a.available.split(',') if x] if a.available is not None else None,
-                resolved=a.resolved)
+                resolved=a.resolved, model_catalog=model_catalog)
     except PolicyError as e:
         print(json.dumps({'schema':1,'error':str(e)}, sort_keys=True)); return 30
     print(json.dumps(r, sort_keys=True))

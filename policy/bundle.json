@@ -14,10 +14,10 @@
   "schema": 1,
   "source_commit": "703cab7fde6c832368c8e266af6ae6bd622d268e",
   "source_hashes": {
-    "README.md": "b81cb6562bfaa567ac351b995b6a507e207729a8cbec0043005398c1377873c4",
-    "claude-code-global-model-routing-prompt.md": "76bf5a2b86f3796e90d00617bec8da33c085f669221123fe755619367b296b38",
-    "codex-global-model-routing-prompt.md": "1536a0d91b5b85ed387ccd1eb3e6929e0e9ec3065b325e0fe1dd69c5d6d1c9a6",
-    "orca-project-setup.md": "74fddb923dba32bd30055e5011b6e14c0a94d4dfe39f4611053217a4dc84fdfb",
+    "README.md": "6ebefa047d2faaf1776d9df787c7137585947a747c302f531b81360d18a9731f",
+    "claude-code-global-model-routing-prompt.md": "e1f3467b26e484d9600d1fccde0653c10537a074dca8284d0709c638f123f0a7",
+    "codex-global-model-routing-prompt.md": "44238e206eba208d5ed85c122c5dd1f60e9d5fd6d1104de4885fd3e629cc7fb7",
+    "orca-project-setup.md": "d071525cffba5a770caee40c0585b76063a94a7f5c2956fb7fcb65102b3dda6b",
     "project-task-policy-setup.md": "e5b487504136f352dda3a076ff3c0a64955478c05b1c4a433ae36ad502981542"
   },
   "version": "0.2.0"

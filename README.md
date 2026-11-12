@@ -4,7 +4,7 @@ AI에게 개발 업무를 맡길 때 **누가 일을 할지, 어디에서 작업
 
 필요한 파일을 AI에게 읽히고 설치를 요청하면, 이후 작업에서 따라야 할 지침과 지원되는 설정을 구성합니다. 아래에서 각 파일이 어떤 상황에 필요한지 설명하고, 뒤쪽에서 상세 운영 전략을 다룹니다.
 
-기준일: **2026-10-07** · 모델 라우팅 개편: **2026-11-06**(전략 1.3.0, 비용 우선, Fable·Astra 최종 단계, Orca 프로젝트별 Controller). 모델·추론 수준·실행 기능은 계정과 제공자, 설치 버전에 따라 달라지므로 적용할 때 다시 확인합니다.
+기준일: **2026-10-07** · 모델 라우팅 개편: **2026-11-12**(전략 1.4.0, 비용 우선, Codex 세대 자동 탐색) · Orca 단일 Worker 조율 경량화: **2026-11-09**. 모델·추론 수준·실행 기능은 계정과 제공자, 설치 버전에 따라 달라지므로 적용할 때 다시 확인합니다.
 
 ## 파일 설명과 설치 방법
 
@@ -104,7 +104,7 @@ Codex만 사용하면 Codex 파일부터, Claude Code만 사용하면 Claude 파
 
 비용이 낮은 모델의 호출 횟수를 늘리는 것보다 **정확성을 유지하면서 전체 사용량과 완료 시간을 줄이는 것**을 목표로 합니다. 전체 비용에는 실행, 맥락 전달, 재시도, 검토, 통합이 모두 포함됩니다.
 
-- 작고 현재 맥락에서 바로 끝낼 수 있는 작업은 Orca 밖에서는 메인이 직접 완료합니다. Orca 업무는 관리되는 Worker가 직접 실행하며 Main·Controller는 조율과 최소 Task 등록 부트스트랩을 맡습니다.
+- 작고 명확한 단일 프로젝트·단일 Worker·저위험 작업은 Orca에서 Main이 Controller 역할을 겸해 Worker를 직접 조율할 수 있습니다. 복수 프로젝트·병렬·장기·고위험 작업에는 별도 Controller를 둡니다. Orca 업무의 실제 수정·검증은 항상 관리 Worker가 수행합니다.
 - 목표·완료 조건·인터페이스가 명확하고 검증 가능한 기능은 실행자에게 맡깁니다. 파일 수만으로 승격하지 않습니다.
 - 불명확한 원인, 공유 상태, 동시성, 구조 변경과 높은 실패 영향은 전문 판단이 필요한 작업으로 분류합니다.
 - 일반 인계에는 목표, 관련 맥락, 담당 파일·책임, 인터페이스, 제약, 완료 조건을 전달합니다.
@@ -129,11 +129,13 @@ Codex만 사용하면 Codex 파일부터, Claude Code만 사용하면 Claude 파
 - 로그에는 업무 데이터·개인정보가 들어갈 수 있으므로 작업이 끝나면 직접 띄운 서버를 멈추고 임시 로그를 정리합니다. 남겨야 하면 로컬 작업 기록 폴더에만 둡니다.
 - 작업을 마치거나 보고할 때 직접 띄운 백그라운드 프로세스와 그 로그 크기를 함께 보고합니다.
 
-## 비용 우선 모델 라우팅 (전략 1.3.0)
+## 비용 우선 모델 라우팅 (전략 1.4.0)
 
 **기본 모델은 Sonnet과 Luna입니다.** Opus·Sol은 승격 조건이나 고위험 작업에서만, Fable·Astra는 Opus·Sol로도 해결하지 못한 최종 단계에서만 사용합니다. 최우선 목표는 토큰 절약이며, 검증을 생략해 절약하지 않습니다. 평가 기준은 토큰 수가 적은 모델이 아니라 **작업을 성공적으로 끝내는 데 든 총비용**입니다.
 
-모델 ID·작업 유형·승격 순서·재시도 상한·대체 모델은 [`policy/model-routing.json`](policy/model-routing.json) 한 곳에서 관리합니다. 정책 문서와 설치 지시서는 이 설정의 값을 설명할 뿐이며, 설정을 바꾸면 라우팅 명령의 결과가 바뀝니다.
+모델 ID·작업 유형·승격 순서·재시도 상한·대체 모델은 [`policy/model-routing.json`](policy/model-routing.json) 한 곳에서 관리합니다. Codex의 Luna·Sol·Astra와 프로젝트 전용 Terra 선택은 실행할 때마다 30일 이내에 갱신된 `CODEX_HOME/models_cache.json`에서 해당 계열의 최신 표시 가능·API 지원 모델을 찾아 사용합니다. 설정의 `id`는 캐시가 없거나 오래됐거나 계열 일치 모델이 없을 때 쓰는 마지막 확인 ID입니다. 캐시는 읽기만 하며 자동 갱신하지 않습니다. Claude 모델은 현재 명시된 버전을 고정해서 사용합니다.
+
+라우팅 결과의 `model_resolution`이 `codex_catalog`이면 현재 Codex 모델 캐시에서 세대를 선택한 것입니다. `pinned_fallback`이면 캐시가 없거나 30일보다 오래됐거나 일치 항목이 없어 설정의 마지막 확인 ID를 사용한 것이므로 최신 세대라고 간주하지 말고, Codex가 모델 캐시를 갱신한 뒤 라우팅을 다시 확인합니다.
 
 | 복잡도 | 대상 예시 | Orca Worker | Claude 단독 | Codex 단독 |
 | --- | --- | --- | --- | --- |
@@ -159,12 +161,14 @@ Codex만 사용하면 Codex 파일부터, Claude Code만 사용하면 Claude 파
 ```bash
 # 작업 유형 또는 복잡도로 모델 선택 (JSON에 orca worker-start 인수 포함)
 python3 -B -m ai_policy.routing --host orca --task-type docs
+python3 -B -m ai_policy.routing --host codex --task-type docs --model-catalog /path/to/models_cache.json
+python3 -B -m ai_policy.routing --host orca --resolve-family terra --effort high  # 프로젝트가 선택한 계열과 effort 유지, 버전 ID만 최신화
 python3 -B -m ai_policy.routing --host orca --task-type feature --failures 2 --failure-kind verification
 python3 -B -m ai_policy.routing --host orca --task-type docs --resolved   # 해결 후 원래 작업 유형의 기본 모델로 복귀
 python3 -B -m ai_policy.routing --host orca --task-type docs --available sonnet,opus   # 사용 불가 모델 대체
 
 # 작업 결과 기록과 모델별 사용량·성공률 보고 (로그의 사용량 수치만 읽고 대화 내용은 읽지 않음)
-python3 -B -m ai_policy.usage record --task-id T-1 --model gpt-6-luna --task-type docs --success true --verified true
+python3 -B -m ai_policy.usage record --task-id T-1 --model <라우팅 결과의 model 값> --task-type docs --success true --verified true
 python3 -B -m ai_policy.usage report --since 2026-11-01
 ```
 
@@ -176,12 +180,12 @@ python3 -B -m ai_policy.usage report --since 2026-11-01
 
 | 책임 | 모델 | 초기 추론 수준 |
 | --- | --- | --- |
-| 메인·요구사항·통합·최종 검토 | `gpt-6-luna` | `high` |
-| 기능 구현·관련 검증 (LEVEL 2) | `gpt-6-luna` | `high` |
-| 단순 작업·좁은 탐색·정형 변환 (LEVEL 1) | `gpt-6-luna` | `medium` |
-| 복잡한 개발 (LEVEL 3) | `gpt-6-luna` | `xhigh` |
-| 승격·고위험 진단 (LEVEL 4) | `gpt-6.1-sol` | `high` |
-| 최종 단계 (LEVEL 5, Sol 2회 실패 후) | `gpt-6-astra` | `high` |
+| 메인·요구사항·통합·최종 검토 | Luna 계열 최신 캐시 모델 | `high` |
+| 기능 구현·관련 검증 (LEVEL 2) | Luna 계열 최신 캐시 모델 | `high` |
+| 단순 작업·좁은 탐색·정형 변환 (LEVEL 1) | Luna 계열 최신 캐시 모델 | `medium` |
+| 복잡한 개발 (LEVEL 3) | Luna 계열 최신 캐시 모델 | `xhigh` |
+| 승격·고위험 진단 (LEVEL 4) | Sol 계열 최신 캐시 모델 | `high` |
+| 최종 단계 (LEVEL 5, Sol 2회 실패 후) | Astra 계열 최신 캐시 모델 | `high` |
 | 선택적 독립 검토 | 사용 가능한 Claude 모델 | 실제 지원 수준 |
 
 ```text
@@ -304,11 +308,11 @@ Git 분기 기준과 Orca 화면의 부모 관계는 별개의 조건입니다. 
 
 Main은 사용자 의도와 최종 판단, Controller는 Orca 조회·작업 위치·모델 선택·배정·결과 회수, Worker는 실제 조사·구현·문서·검증을 맡습니다. 실제 업무 실행을 Orca의 관리 밖에서 수행해 작업자 추적을 우회하지 않습니다. 배정 규칙은 Main·Controller에 적용하고 Worker는 담당 범위를 직접 실행합니다. Worker의 재위임에는 Main·Controller의 명시적 승인과 추적 가능한 실행이 필요합니다. 단순 질의 응답·정책 읽기·조율·상태 조회에는 Worker 생성을 요구하지 않습니다.
 
-**기본 구조는 Main → 프로젝트별 Controller → Worker입니다.** 실행 목표가 있으면 Main은 Project·Goal마다 별도 Controller 하위 에이전트(Sonnet medium)를 두고 사용자 대화와 최종 판단만 맡습니다. Controller는 자기 Run을 만들고 모든 명령에 `--run`을 붙이며, `check --run <id> --wait`로 Worker 결과를 받습니다. Main이 Orca 메일로 깨워지면 해당 Run의 Controller에 넘깁니다. 2026-11-06 시험 실행에서 이 구조로 Worker 완료를 받았고 Main은 깨워지지 않았습니다. Orca 실행 재시도(도구·환경·Worker 중단)는 같은 원인에 최대 3회, 모델 판단 실패의 승격 기준은 2회입니다. **사용자가 Controller를 지정하면 그 지정이 우선합니다.** Codex로 고정하지 않으며, Codex에서 요청해도 Claude를 Controller로 지정할 수 있고 반대도 가능합니다. 호스트가 하위 에이전트를 지원하지 않으면 그 제한을 보고하고, 사용자와 정한 경우에만 Main이 Controller를 겸합니다. 지정한 에이전트의 실행·접근·Orca 조율 기능을 확인할 수 없으면 임의 대체하지 않고 필요한 정보나 대체 지정을 요청합니다. Controller 지정과 아래 Worker 모델 선택은 별개이며, 진행 중 Controller 변경은 조율 상태와 권한 연결을 확인해 인계합니다.
+**단일 프로젝트·단일 Worker·짧고 동기적인 저위험 목표는 Main이 Controller 역할을 겸해 Orca Worker 하나를 직접 조율할 수 있습니다.** 복수 프로젝트, 병렬 Worker, 장기 실행, 고위험·복잡한 조율에는 프로젝트별 Controller를 둡니다. 실제 조사·구현·검증은 항상 관리 Worker가 수행합니다. Main 또는 Controller 중 하나만 Run을 소유하고 worker-start·task·check에 그 Run ID를 전달합니다. 별도 Controller가 Run을 소유하면 Main은 해당 Run의 메시지를 Controller에 전달하고, Main이 소유하면 Main이 메시지를 직접 확인합니다. Orca 실행 재시도(도구·환경·Worker 중단)는 같은 원인에 최대 3회, 모델 판단 실패의 승격 기준은 2회입니다. **사용자가 Controller를 지정하면 그 지정이 우선합니다.** Codex로 고정하지 않으며, Codex에서 요청해도 Claude를 Controller로 지정할 수 있고 반대도 가능합니다. 지정된 Controller의 실행·접근·Orca 조율 기능을 확인할 수 없으면 임의 대체하지 않습니다. Controller 지정과 Worker 모델 선택은 별개이며, 진행 중 변경은 실제 조율 상태와 권한을 인계한 뒤 적용합니다.
 
 | 역할 | 기본 | 대체 후보 |
 | --- | --- | --- |
-| Controller(프로젝트 코디네이터) | Sonnet 5.5 medium | Luna high |
+| Controller(복수 프로젝트·병렬·장기·고위험 조율) | Sonnet 5.5 medium | Luna high |
 | 좁은 탐색·추출 | Luna medium | Haiku |
 | LEVEL 1 단순 작업·문서·테스트 | Luna medium | Sonnet 5.5 |
 | LEVEL 2 일반 개발·일반 리뷰 | Sonnet 5.5 medium | Luna high |
