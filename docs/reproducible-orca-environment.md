@@ -2,21 +2,26 @@
 
 This repository provides a Python standard-library CLI for a shared Orca policy
 bundle, conditional Codex/Claude adapters, and explicit-home installation,
-inspection, removal and restoration. Repository tests and synthetic-home
-installation are validated; live automatic loading and full AI environment
-restoration remain pending.
+inspection, removal and restoration. The source bundle, its five pinned
+installation-source hashes, and synthetic-home installation have been validated;
+live automatic loading and full AI environment
+restoration remain pending. The source hashes identify the reviewed source snapshot;
+they do not prove live loading or publisher identity.
 
-The new G1 candidate consists of the [bundle manifest](../policy/bundle.json),
+The G1 bundle consists of the [bundle manifest](../policy/bundle.json),
 [shared body](../policy/orca-common.md) and conditional
 [Codex](../policy/adapters/codex.md)/[Claude](../policy/adapters/claude.md) adapters.
-Original policy sources remain the [repository overview](../README.md),
+Canonical policy sources are the [repository overview](../README.md),
 [Codex routing](../codex-global-model-routing-prompt.md),
 [Claude routing](../claude-code-global-model-routing-prompt.md),
-[Orca project setup](../orca-project-setup.md) and
-[project Task setup](../project-task-policy-setup.md).
-These original sources are unchanged. G1 candidate acceptance covers repository
-code and temporary-home fixtures; effective installed policy and any source
-reconciliation require their own review and live-loading evidence.
+[Orca project setup](../orca-project-setup.md),
+[Orca Worker lifecycle rulebook](orca-worker-lifecycle.md) and
+[project Task setup](../project-task-policy-setup.md). The bundle source hashes pin
+the five installer-source files listed in its manifest; lifecycle documentation
+is a linked repository rulebook, not an installer component. Its source commit
+points to a committed source snapshot, followed by a metadata-only manifest commit.
+Source reconciliation is tracked in Git; effective installed policy and live
+loading still require separate evidence.
 
 Run from the repository root with Python 3.10 or later. No dependency installation
 is required:

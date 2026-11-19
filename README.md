@@ -308,7 +308,7 @@ Git 분기 기준과 Orca 화면의 부모 관계는 별개의 조건입니다. 
 
 Main은 사용자 의도와 최종 판단, Controller는 Orca 조회·작업 위치·모델 선택·배정·결과 회수, Worker는 실제 조사·구현·문서·검증을 맡습니다. 실제 업무 실행을 Orca의 관리 밖에서 수행해 작업자 추적을 우회하지 않습니다. 배정 규칙은 Main·Controller에 적용하고 Worker는 담당 범위를 직접 실행합니다. Worker의 재위임에는 Main·Controller의 명시적 승인과 추적 가능한 실행이 필요합니다. 단순 질의 응답·정책 읽기·조율·상태 조회에는 Worker 생성을 요구하지 않습니다.
 
-**단일 프로젝트·단일 Worker·짧고 동기적인 저위험 목표는 Main이 Controller 역할을 겸해 Orca Worker 하나를 직접 조율할 수 있습니다.** 복수 프로젝트, 병렬 Worker, 장기 실행, 고위험·복잡한 조율에는 프로젝트별 Controller를 둡니다. 실제 조사·구현·검증은 항상 관리 Worker가 수행합니다. Main 또는 Controller 중 하나만 Run을 소유하고 worker-start·task·check에 그 Run ID를 전달합니다. 별도 Controller가 Run을 소유하면 Main은 해당 Run의 메시지를 Controller에 전달하고, Main이 소유하면 Main이 메시지를 직접 확인합니다. Orca 실행 재시도(도구·환경·Worker 중단)는 같은 원인에 최대 3회, 모델 판단 실패의 승격 기준은 2회입니다. **사용자가 Controller를 지정하면 그 지정이 우선합니다.** Codex로 고정하지 않으며, Codex에서 요청해도 Claude를 Controller로 지정할 수 있고 반대도 가능합니다. 지정된 Controller의 실행·접근·Orca 조율 기능을 확인할 수 없으면 임의 대체하지 않습니다. Controller 지정과 Worker 모델 선택은 별개이며, 진행 중 변경은 실제 조율 상태와 권한을 인계한 뒤 적용합니다.
+**단일 프로젝트·단일 Worker·짧고 동기적인 저위험 목표는 Main이 Controller 역할을 겸해 Orca Worker 하나를 직접 조율할 수 있습니다.** 복수 프로젝트, 병렬 Worker, 장기 실행, 고위험·복잡한 조율에는 프로젝트별 Controller를 둡니다. 실제 조사·구현·검증은 항상 관리 Worker가 수행합니다. Main 또는 Controller 중 한 명만 Run을 소유합니다. **사용자가 Controller를 지정하면 그 지정이 우선합니다.** 지정된 Controller의 실행·접근·Orca 조율 기능을 확인할 수 없으면 임의 대체하지 않으며, 진행 중 변경은 실제 조율 상태와 권한을 인계한 뒤 적용합니다. Orca 관리 Worker의 완료 전달·정산·release는 [Orca Worker lifecycle rulebook](docs/orca-worker-lifecycle.md)을 따릅니다.
 
 | 역할 | 기본 | 대체 후보 |
 | --- | --- | --- |
@@ -326,7 +326,7 @@ Codex 지휘자가 Claude Worker를 선택할 수 있고, Claude 지휘자도 Co
 
 선택은 위 기본값에서 시작해 접근·설치·실행 호스트·필요 도구를 지원하는 후보 중에서 작업의 불명확성·결합·검증 가능성·실패 영향과 유사 업무의 성공 기록으로 조정합니다. `ai_policy.usage report`의 추천이 충분한 표본으로 나오면 그 기록을 우선합니다. 브랜드별 고정 순위나 특정 유형의 무조건적 우열을 만들지 않습니다. 요청값과 실제 실행된 도구·모델·추론 수준, 선택 이유를 기록합니다.
 
-모델 교체는 기존 워크트리와 변경을 보존하면서 목표·diff·검증 결과·실패 가설을 인계하는 절차입니다. 동일 파일의 쓰기 책임자는 한 명이며 기존 실행의 종료·정리가 불확실하면 새 쓰기 작업자를 시작하지 않습니다. 타임아웃을 종료 증거로 취급하지 않습니다. 해당 실행의 종료·settlement/release 상태 또는 확인된 프로세스 종료·잔여 쓰기 부재를 확인하고 필수 Orca 정리를 마쳐야 교체할 수 있습니다. 수동 종료도 대상·시점·방법과 가능한 런타임 상태를 대조하며 종료나 잔여 상태가 불확실하면 교체를 차단합니다.
+모델 교체는 기존 워크트리와 변경을 보존하면서 목표·diff·검증 결과·실패 가설을 인계하는 절차입니다. 동일 파일의 쓰기 책임자는 한 명으로 유지하며, 기존 Orca Worker의 종료·정산·release가 불확실하면 새 쓰기 작업자로 교체하지 않고 [Orca Worker lifecycle rulebook](docs/orca-worker-lifecycle.md)에 따라 확인합니다.
 
 ### 설치 산출물은 Git 추적 금지
 
