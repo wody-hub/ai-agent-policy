@@ -17,3 +17,9 @@ This rulebook applies to Orca-supervised managed Workers. Project Task registrat
 - Do not claim direct terminal/agent or Codex/Claude child-agent shutdown or release unless the runtime provides evidence for that exact session. Report lifecycle as unverified when it cannot be established.
 
 Completion reports include the Dispatch outcome, release state, preserved result/verification, and any unresolved lifecycle status.
+
+## Worker result and Task handoff
+
+- Each Worker sends one concise result with the Task ID, Dispatch ID, outcome, changed files and summary, verification commands and results with evidence references, unverified items or blockers, and the next action. Include release state in the Run owner's record after settlement and release. Record unknown values as unverified.
+- The Run owner uses this result for integration and follows its references when more detail is needed. Preserve the source evidence. Include applicable acceptance criteria and constraints in handoffs for high-risk independent review. A settled Dispatch records Worker execution status. The project Task policy governs overall completion and any required production verification.
+- When available, record requested and confirmed tool/model/effort, elapsed time, retry count and cause, and verification status alongside the Task and Dispatch IDs. Use the existing usage recorder for supported outcome fields under the same Task ID and keep Dispatch-specific details in the result. Leave unavailable measurements blank. Compare tokens, elapsed time and rework per verified Task, accounting for all attempts where measurements can be linked.
