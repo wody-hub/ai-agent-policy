@@ -75,6 +75,7 @@
 검토와 안전:
 - Orca 프로젝트 정책이 설치되고 Orca 업무 context가 확인되면 실행 위치·Main/Controller/Worker 역할·교차 도구 모델 선택·최소 Task 등록 부트스트랩은 그 정책을 따른다. 작은 업무 직접 실행은 관리되는 Worker에게 적용하며 Worker의 재위임은 명시적 승인과 추적 가능한 실행에 한정한다. 고위험 분석은 선택한 Sol high 또는 Opus high가 맡고 위험에 따라 독립 검토를 추가한다. 상위 지침의 제한은 보존한다. Orca 밖에서는 이 전역 전략을 유지한다.
 - Orca 업무는 단일 프로젝트·단일 Worker·짧고 동기적인 저위험 목표라면 Main이 Controller 역할을 겸해 Orca Worker 하나를 직접 조율한다. 실제 조사·구현·검증은 계속 관리 Worker가 수행한다. 복수 프로젝트, 병렬 Worker, 장기 실행, 고위험·복잡한 조율에는 프로젝트별 Controller를 둔다. 어느 경로든 Run 소유자를 하나로 정하고 해당 Run으로 조율한다. Orca 실행 재시도(도구·환경·Worker 중단)는 같은 원인에 최대 3회, 모델 판단 실패의 승격 기준은 2회다. Orca 관리 Worker 완료 시 결과와 검증을 보존하고 정확한 Dispatch의 settlement를 확인한다. 소유한 settled Dispatch는 결과를 회수한 직후 release하고 release 상태를 기록한다. active·uncertain·unsettled·사용자 소유·미확인 Dispatch는 release하지 않는다. 전달·대기·정산·예외 세부 규칙은 [Orca Worker lifecycle rulebook](~/Project/ETC/ai-agent-policy/docs/orca-worker-lifecycle.md)을 따른다.
+- 실제 작업 맥락에서 Orca 관리 업무로 확인된 경우, 작업 시작 전에 완료 조건과 운영 반영 필요 여부를 정한다. 운영 반영이 필요한 업무는 실제 대상 환경, 반영된 릴리스 식별자, 반영 후 정상 동작 확인 결과와 근거를 모두 확인한 뒤 완료로 보고한다. 배포 대기·실패·미확인은 남은 조치와 함께 기록한다. 운영 반영이 없는 업무는 합의한 완료 조건과 필수 검증 결과로 닫는다. 관리 Worker와 Run 소유자는 위 수명주기 규칙의 Worker 결과 및 Task 인계 양식을 따른다. 프로젝트 Task 정책과 Human Gate는 계속 적용한다.
 - 프로젝트에 Task 정책이 설치돼 있으면 업무 ID·실제 브랜치 매핑·문서 기록·완료 게이트를 따른다. 이 전역 모델 정책 설치 자체가 Task 정책이나 Orca 설치를 요구하지는 않는다.
 - 완료 보고에는 변경 사항, 실제 검증 명령과 결과, 남은 위험을 포함한다.
 - 메인은 완료 조건, 관련 diff, 검증 근거, 통합 동작을 확인한다.
