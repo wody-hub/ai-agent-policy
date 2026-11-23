@@ -8,6 +8,13 @@ This rulebook applies to Orca-supervised managed Workers. Project Task registrat
 - Prefer runtime wake-based delivery when available. Where a wake is unavailable, unreliable, or not delivered to the Run owner, use bounded blocking waits: `orca orchestration check --run <run_id> --wait --timeout-ms <limit>`. On timeout, inspect only that Run and either make another bounded wait or report its current state. A timeout does not mean completion or failure.
 - Never use an unscoped `check` or plain/repeated polling to wait for completion. Do not wait for automatic session cleanup as a substitute for handling the result.
 
+## Controller resume and handoff
+
+1. A Run ID selects the Run and does not bind a new Controller. On `consumer_fenced`, stop consuming mail and making changes. Use supported `run-show --id <run_id>` and `inbox --terminal run:<run_id>` reads to reconcile the host, latest results and unresolved Dispatches. Even `check --peek` can require the current binding.
+2. For a planned handoff, the current Controller stops waits, reads and dispatches, then transfers handled results, outstanding work and any uncertain mutation receipts. If it is unavailable, reconcile those items from the durable records and mark any gaps before proceeding. Do not repeat work whose outcome is uncertain.
+3. In an eligible Controller session at the Run's home Orca, preferably one with no other Run bindings, execute `orca orchestration run-use --id <run_id>`. This changes the binding and may unbind other Runs held by that session. Verify the intended binding with `orca orchestration run-current` and reconcile the existing Tasks, Dispatches and unread mail before starting or releasing any Worker. Only the newly bound Controller resumes consumption. If the binding outcome is unknown, inspect it or recover the exact request using its receipt; do not start a replacement Run to bypass the fence.
+4. Worker placement can span hosts. Controller binding remains at the Run's home; a peer Run cannot be taken over from the other host. A Worker cannot take over its own or an ancestor Run. Use `--takeover-legacy` only for an eligible automatically adopted legacy Run under the runtime's documented recovery procedure.
+
 ## Settlement and release
 
 - Preserve the Worker result and verification evidence, then confirm the exact Dispatch is settled (`worker_done` or a settled failure) before cleanup.
