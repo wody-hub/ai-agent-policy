@@ -4,7 +4,7 @@ AI에게 개발 업무를 맡길 때 **누가 일을 할지, 어디에서 작업
 
 필요한 파일을 AI에게 읽히고 설치를 요청하면, 이후 작업에서 따라야 할 지침과 지원되는 설정을 구성합니다. 아래에서 각 파일이 어떤 상황에 필요한지 설명하고, 뒤쪽에서 상세 운영 전략을 다룹니다.
 
-기준일: **2026-10-07** · 모델 라우팅 개편: **2026-11-12**(전략 1.4.0, 비용 우선, Codex 세대 자동 탐색) · Orca 단일 Worker 조율 경량화: **2026-11-09**. 모델·추론 수준·실행 기능은 계정과 제공자, 설치 버전에 따라 달라지므로 적용할 때 다시 확인합니다.
+기준일: **2026-10-07** · Orca 모델 라우팅: **1.5.0**(품질 기준 우선, 유형별 경로) · 단독 도구 전략: **1.4.0** · Orca 단일 Worker 조율 경량화: **2026-11-09**. 모델·추론 수준·실행 기능은 계정과 제공자, 설치 버전에 따라 달라지므로 적용할 때 다시 확인합니다.
 
 ## 파일 설명과 설치 방법
 
@@ -129,9 +129,9 @@ Codex만 사용하면 Codex 파일부터, Claude Code만 사용하면 Claude 파
 - 로그에는 업무 데이터·개인정보가 들어갈 수 있으므로 작업이 끝나면 직접 띄운 서버를 멈추고 임시 로그를 정리합니다. 남겨야 하면 로컬 작업 기록 폴더에만 둡니다.
 - 작업을 마치거나 보고할 때 직접 띄운 백그라운드 프로세스와 그 로그 크기를 함께 보고합니다.
 
-## 비용 우선 모델 라우팅 (전략 1.4.0)
+## 모델 라우팅
 
-**기본 모델은 Sonnet과 Luna입니다.** Opus·Sol은 승격 조건이나 고위험 작업에서만, Fable·Astra는 Opus·Sol로도 해결하지 못한 최종 단계에서만 사용합니다. 최우선 목표는 토큰 절약이며, 검증을 생략해 절약하지 않습니다. 평가 기준은 토큰 수가 적은 모델이 아니라 **작업을 성공적으로 끝내는 데 든 총비용**입니다.
+**Orca에서는 Terra·Luna·Sonnet을 역할과 유형에 맞춰 배정합니다.** Opus·Sol은 승격 조건이나 고위험 작업에서만, Fable·Astra는 Opus·Sol로도 해결하지 못한 최종 단계에서만 사용합니다. Orca는 필수 품질 기준을 먼저 충족한 경로의 전체 비용을 비교합니다. 평가 기준은 토큰 수가 적은 모델이 아니라 **작업을 성공적으로 끝내는 데 든 총비용**입니다.
 
 모델 ID·작업 유형·승격 순서·재시도 상한·대체 모델은 [`policy/model-routing.json`](policy/model-routing.json) 한 곳에서 관리합니다. Codex의 Luna·Sol·Astra와 프로젝트 전용 Terra 선택은 실행할 때마다 30일 이내에 갱신된 `CODEX_HOME/models_cache.json`에서 해당 계열의 최신 표시 가능·API 지원 모델을 찾아 사용합니다. 설정의 `id`는 캐시가 없거나 오래됐거나 계열 일치 모델이 없을 때 쓰는 마지막 확인 ID입니다. 캐시는 읽기만 하며 자동 갱신하지 않습니다. Claude 모델은 현재 명시된 버전을 고정해서 사용합니다.
 
@@ -139,16 +139,16 @@ Codex만 사용하면 Codex 파일부터, Claude Code만 사용하면 Claude 파
 
 | 복잡도 | 대상 예시 | Orca Worker | Claude 단독 | Codex 단독 |
 | --- | --- | --- | --- | --- |
-| 역할: 루트 오케스트레이터·프로젝트 코디네이터 | 작업 분해·조정·최종 검토 | Sonnet medium | Sonnet medium | Luna high |
+| 역할: 루트 오케스트레이터·프로젝트 코디네이터 | 작업 분해·조정·최종 검토 | Terra high / Luna high | Sonnet medium | Luna high |
 | LEVEL 1 단순 | 이름 변경, 문서, 테스트 작성, 정형 코드, 단순 UI, 기존 패턴 반복, 일반 코드 분석 | Luna medium | Sonnet low | Luna medium |
-| LEVEL 2 일반 | 기능·API·데이터 로직·프론트엔드, 일반 버그, 일반 코드 리뷰 | Sonnet medium | Sonnet medium | Luna high |
-| LEVEL 3 복잡 | 다중 모듈, 상태 관리, 성능, 비동기, 통합, 복잡한 데이터 흐름, 아키텍처 설계 | Sonnet high | Sonnet high | Luna xhigh |
+| LEVEL 2 일반 | 기능·API·데이터 로직·프론트엔드, 일반 버그 | Luna high | Sonnet medium | Luna high |
+| LEVEL 3 복잡 | 다중 모듈, 상태 관리, 성능, 비동기, 통합, 복잡한 데이터 흐름 | Sonnet high | Sonnet high | Luna xhigh |
 | LEVEL 4 고난도 | 중대한 구조 변경, 동시성, 반복 미해결 오류, 광범위 분석, 보안, 데이터 무결성 | Opus high 또는 Sol high | Opus high | Sol high |
 | LEVEL 5 최종 단계 | LEVEL 4에서도 2회 실패한 문제만 (시작 레벨로 쓰지 않음) | Fable high 또는 Astra high | Fable high | Astra high |
 
 파일·심볼 조회와 정형 추출은 Haiku 4.5(Claude) 또는 Luna medium(Codex)이 맡습니다. Claude 단독 세션에서 Luna를 쓰려고 Codex를 호출하지 않습니다. 도구 간 전달 비용이 절약분보다 크기 때문입니다.
 
-**승격.** 같은 실행자가 검증 실패·원인 미파악·복잡도 급증으로 2회 실패하면 한 단계 승격합니다(Luna → Sonnet → Opus/Sol). 구조 위험·요구사항 모순·데이터 무결성 위험은 즉시 LEVEL 4로 갑니다. 환경·권한·외부 서비스·테스트 환경·모델 접근 오류는 승격 사유가 아니며 같은 모델로 상태를 보존한 채 원인을 해결합니다. 모델을 바꿔도 시도 횟수는 초기화되지 않습니다. LEVEL 4(Opus/Sol)에서도 2회 실패하면 최종 단계인 LEVEL 5(Fable/Astra)로 올리고, 거기서도 2회 실패하면 자동 승격을 멈추고 사용자에게 증거와 필요한 판단을 넘깁니다. 고위험 작업이나 대체 모델 선택으로 LEVEL 5에 바로 가지 않습니다.
+**승격.** 같은 실행자가 검증 실패·원인 미파악·복잡도 급증으로 2회 실패하면 한 단계 승격합니다(Orca의 교차 진단은 역할별 라우팅 참고). 구조 위험·요구사항 모순·데이터 무결성 위험은 즉시 LEVEL 4로 갑니다. 환경·권한·외부 서비스·테스트 환경·모델 접근 오류는 승격 사유가 아니며 같은 모델로 상태를 보존한 채 원인을 해결합니다. 모델을 바꿔도 시도 횟수는 초기화되지 않습니다. LEVEL 4(Opus/Sol)에서도 2회 실패하면 최종 단계인 LEVEL 5(Fable/Astra)로 올리고, 거기서도 2회 실패하면 자동 승격을 멈추고 사용자에게 증거와 필요한 판단을 넘깁니다. 고위험 작업이나 대체 모델 선택으로 LEVEL 5에 바로 가지 않습니다.
 
 **승격 인계.** 전체 대화를 넘기지 않고 목표, 관련 파일, 현재 구현 상태, 오류, 시도 내용, 실패 가설, 필요한 판단만 구조화해 전달합니다. 상위 모델은 문제 분석이나 핵심 결정만 맡고, 구현은 가능하면 Sonnet·Luna가 이어받습니다. 해결되면 후속 작업은 원래 복잡도의 기본 모델로 돌아갑니다.
 
@@ -312,19 +312,19 @@ Main은 사용자 의도와 최종 판단, Controller는 Orca 조회·작업 위
 
 | 역할 | 기본 | 대체 후보 |
 | --- | --- | --- |
-| Controller(복수 프로젝트·병렬·장기·고위험 조율) | Sonnet 5.5 medium | Luna high |
+| Main / Controller | Terra high / Luna high | Sonnet high / Terra high |
 | 좁은 탐색·추출 | Luna medium | Haiku |
 | LEVEL 1 단순 작업·문서·테스트 | Luna medium | Sonnet 5.5 |
-| LEVEL 2 일반 개발·일반 리뷰 | Sonnet 5.5 medium | Luna high |
-| LEVEL 3 복잡한 개발 | Sonnet 5.5 high | Luna |
+| LEVEL 2 일반 개발 | Luna high | Sonnet high |
+| LEVEL 3 복잡한 개발 | Sonnet 5.5 high | Terra high |
 | LEVEL 4 승격·고위험 | Opus 5.5 high 또는 Sol 6.1 high | 서로 대체 |
 | LEVEL 5 최종 단계 (LEVEL 4 2회 실패 후) | Fable 5.1 high | Astra high |
 
-Controller는 `python3 -B -m ai_policy.routing --host orca ...` 결과의 `action`을 확인한 뒤, 실행 가능한 action이면 `orca_worker_args`를 `orca orchestration worker-start`에 넘깁니다. 결과의 요청 모델과 실제 실행 모델은 따로 확인합니다.
+세부 배정은 [Orca 역할별 라우팅](docs/orca-model-routing.md)을 따릅니다. Controller는 `python3 -B -m ai_policy.routing --host orca ...` 결과의 `action`을 확인한 뒤, 실행 가능한 action이면 `orca_worker_args`를 `orca orchestration worker-start`에 넘깁니다. 결과의 요청 모델과 실제 실행 모델은 따로 확인합니다.
 
 Codex 지휘자가 Claude Worker를 선택할 수 있고, Claude 지휘자도 Codex Worker를 선택할 수 있습니다. Orca 정책은 양쪽 도구의 구현·검증 배정을 명시적으로 허용합니다. 상위 시스템·개발자·조직 정책과 실행 권한은 넘지 않으며 Orca 밖에서는 기존 전략을 유지합니다. 고위험 작업의 분석·검토도 선택한 Sol high 또는 Opus high가 담당합니다. 두 계열을 모두 필수 검토자로 요구하지 않으며 위험에 따라 독립 전문가 검토를 추가합니다.
 
-선택은 위 기본값에서 시작해 접근·설치·실행 호스트·필요 도구를 지원하는 후보 중에서 작업의 불명확성·결합·검증 가능성·실패 영향과 유사 업무의 성공 기록으로 조정합니다. `ai_policy.usage report`의 추천이 충분한 표본으로 나오면 그 기록을 우선합니다. 브랜드별 고정 순위나 특정 유형의 무조건적 우열을 만들지 않습니다. 요청값과 실제 실행된 도구·모델·추론 수준, 선택 이유를 기록합니다.
+선택은 위 기본값에서 시작해 접근·설치·실행 호스트·필요 도구를 지원하는 후보 중에서 작업의 불명확성·결합·검증 가능성·실패 영향과 유사 업무의 성공 기록으로 조정합니다. `ai_policy.usage report`의 추천은 필수 검증 성공률과 함께 판단합니다. 브랜드별 고정 순위나 특정 유형의 무조건적 우열을 만들지 않습니다. 요청값과 실제 실행된 도구·모델·추론 수준, 선택 이유를 기록합니다.
 
 모델 교체는 기존 워크트리와 변경을 보존하면서 목표·diff·검증 결과·실패 가설을 인계하는 절차입니다. 동일 파일의 쓰기 책임자는 한 명으로 유지하며, 기존 Orca Worker의 종료·정산·release가 불확실하면 새 쓰기 작업자로 교체하지 않고 [Orca Worker lifecycle rulebook](docs/orca-worker-lifecycle.md)에 따라 확인합니다.
 

@@ -21,9 +21,28 @@ class RoutingTests(unittest.TestCase):
         self.assertEqual(pick(r(host='codex', task_type='docs')), ('luna','medium'))
 
     def test_general_and_complex(self):
-        for t in ('feature','api'): self.assertEqual(pick(r(host='orca', task_type=t)), ('sonnet','medium'))
+        for t in ('feature','api'): self.assertEqual(pick(r(host='orca', task_type=t)), ('luna','high'))
         for t in ('multi_module','async'):
             x=r(host='orca', task_type=t); self.assertEqual(pick(x), ('sonnet','high')); self.assertEqual(x['level'], 3)
+
+    def test_orca_task_routes_and_safety_precedence(self):
+        cases = {
+            'architecture': ('terra', 'high'), 'requirements': ('sonnet', 'high'),
+            'frontend_complex': ('sonnet', 'high'), 'log_summary': ('luna', 'low'),
+            'code_review_codex': ('sonnet', 'medium'), 'important_review_codex': ('sonnet', 'high'),
+            'code_review_claude': ('terra', 'high'), 'diagnose_codex_failure': ('sonnet', 'high'),
+            'diagnose_claude_failure': ('luna', 'high'),
+        }
+        for task, expected in cases.items():
+            with self.subTest(task=task):
+                self.assertEqual(pick(r(host='orca', task_type=task)), expected)
+        self.assertEqual(pick(r(host='orca', task_type='api', available=['terra'])), ('terra', 'high'))
+        self.assertEqual(pick(r(host='orca', task_type='code_review_claude', available=['luna'])), ('luna', 'high'))
+        self.assertEqual(r(host='orca', task_type='code_review_codex', available=['luna'])['action'], 'blocked_no_available_model')
+        self.assertEqual(pick(r(host='orca', task_type='frontend', level=1)), ('luna', 'medium'))
+        self.assertEqual(pick(r(host='orca', task_type='auth', level=1, available=['sol'])), ('sol', 'high'))
+        self.assertEqual(pick(r(host='orca', task_type='architecture', failure_kind='data_integrity_risk')), ('opus', 'high'))
+        self.assertEqual(pick(r(host='claude', task_type='feature')), ('sonnet', 'medium'))
 
     def test_failure_escalation(self):
         x=r(host='orca', task_type='feature', failures=2, failure_kind='verification')
@@ -32,7 +51,7 @@ class RoutingTests(unittest.TestCase):
         x=r(host='orca', level=3, failures=2); self.assertEqual(pick(x), ('opus','high'))
         self.assertEqual(pick(r(host='codex', level=3, failures=2)), ('sol','high'))
         x=r(host='orca', level=2, failures=1, failure_kind='reasoning')
-        self.assertEqual((x['action'], pick(x), x['escalated']), ('retry', ('sonnet','medium'), False))
+        self.assertEqual((x['action'], pick(x), x['escalated']), ('retry', ('luna','high'), False))
         x=r(host='orca', level=4, failures=2, failure_kind='verification')
         self.assertEqual((x['action'], pick(x)), ('escalate', ('fable','high')))
         self.assertTrue(x['preserve_state'] and x['handoff_fields'])
@@ -50,13 +69,15 @@ class RoutingTests(unittest.TestCase):
         self.assertFalse(x['preserve_state'])
 
     def test_roles(self):
-        for h in ('orca','claude'):
-            for role in ('project_coordinator','root_orchestrator'): self.assertEqual(pick(r(host=h, role=role)), ('sonnet','medium'))
+        for role in ('project_coordinator','root_orchestrator'):
+            self.assertEqual(pick(r(host='claude', role=role)), ('sonnet','medium'))
+        self.assertEqual(pick(r(host='orca', role='root_orchestrator')), ('terra','high'))
+        self.assertEqual(pick(r(host='orca', role='project_coordinator')), ('luna','high'))
         self.assertEqual(pick(r(host='codex', role='root_orchestrator')), ('luna','high'))
 
     def test_availability(self):
         x=r(host='orca', task_type='docs', available=['sonnet','opus'])
-        self.assertEqual(pick(x), ('sonnet','low')); self.assertTrue(x['fallback_used']); self.assertIn('model_unavailable:luna', x['reasons'])
+        self.assertEqual(pick(x), ('sonnet','medium')); self.assertTrue(x['fallback_used']); self.assertIn('model_unavailable:luna', x['reasons'])
         # fallback takes the effort that model has at the same level elsewhere; premium is never a fallback for ordinary work
         self.assertEqual(pick(r(host='orca', task_type='feature', available=['luna'])), ('luna','high'))
         self.assertEqual(r(host='claude', task_type='docs', available=['opus'])['action'], 'blocked_no_available_model')
@@ -87,13 +108,13 @@ class RoutingTests(unittest.TestCase):
         self.assertEqual(r(host='orca', level=5, failures=1, failure_kind='verification')['action'], 'retry')
         x=r(host='orca', level=5, failures=2, failure_kind='verification'); self.assertEqual(x['orca_worker_args'], [])
         # roles escalate one step from their own level, not straight to LEVEL 4
-        self.assertEqual(pick(r(host='orca', role='lookup', failures=2)), ('sonnet','medium'))
+        self.assertEqual(pick(r(host='orca', role='lookup', failures=2)), ('luna','high'))
         self.assertEqual(pick(r(host='orca', role='project_coordinator', failures=2)), ('sonnet','high'))
 
     def test_non_model_failure(self):
         for k in ('environment','model_unavailable'):
             x=r(host='orca', level=2, failures=1, failure_kind=k)
-            self.assertEqual((x['action'], pick(x), x['preserve_state'], x['attempts_reset'], x['escalated']), ('retry_same_model_preserve_state', ('sonnet','medium'), True, False, False))
+            self.assertEqual((x['action'], pick(x), x['preserve_state'], x['attempts_reset'], x['escalated']), ('retry_same_model_preserve_state', ('luna','high'), True, False, False))
             self.assertIn('non_model_failure', x['reasons'])
         # Orca execution retries: up to 3 runs in total, then stop without escalating the model
         x=r(host='orca', task_type='feature', failures=2, failure_kind='environment'); self.assertEqual(x['action'], 'retry_same_model_preserve_state')

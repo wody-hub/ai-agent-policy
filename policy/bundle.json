@@ -7,7 +7,7 @@
     "ai_policy/install.py": "d90afd16f67ae2cc359bdea1c38c4abeafbadf6a41cb67d0bad558bd7e6eec9d",
     "policy/adapters/claude.md": "27600dd29e5a6667a6de48d2f7dcb792b5ab0d9a9a94aace71ce53c5c8bc1f9c",
     "policy/adapters/codex.md": "27600dd29e5a6667a6de48d2f7dcb792b5ab0d9a9a94aace71ce53c5c8bc1f9c",
-    "policy/orca-common.md": "c2df089ebe86aa54bcc348f613c9b9a92229311d49a335632299203b454e1de8"
+    "policy/orca-common.md": "545f8710d3fc62dbace3f9972bdf3ba07459a62f2ae8268bfd52a55b1499ba86"
   },
   "installer_schema": 1,
   "installer_version": "0.1.0",
@@ -20,5 +20,5 @@
     "orca-project-setup.md": "c0101302d2df247f64dbc185ac8da59eb6e4d9f69f789d5f879f0bf921e72850",
     "project-task-policy-setup.md": "fbd11dc9c6007fd9c09cc92aab100004793e411e7739b5e142692e14e2cbe165"
   },
-  "version": "0.2.0"
+  "version": "0.2.1"
 }

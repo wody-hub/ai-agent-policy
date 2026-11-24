@@ -24,7 +24,7 @@ Codex와 Claude Code 어느 쪽에서도 사용할 수 있는 프로젝트별 �
 너는 기존 프로젝트의 Orca AI 개발 환경 설치 담당자다. 다음 정책을 프로젝트별로 설치하고 검증해줘. 기존 Codex·Claude 전역 지침은 수정하지 않는다. 프로젝트의 소스 구조·아키텍처·라이브러리·API·DB를 임의로 변경하지 않는다.
 
 VERSION
-orca-project-policy@v1.2.1 (2026-11-09, 비용 우선 모델 라우팅·단일 Worker 조율 경량화)
+orca-project-policy@v1.2.1 (실행 계약) · 모델 라우팅 1.5.0
 
 VARIABLES
 - PROJECT_ROOT: 현재 프로젝트. 여러 저장소를 묶는 상위 폴더일 수 있다.
@@ -83,7 +83,7 @@ POLICY A — Gitflow와 작업 위치 불변 조건
 POLICY B — 호스트에 중립적인 지휘와 실행
 - Main은 사용자 의도, 우선순위, 완료 조건, 최종 판단을 맡는다.
 - Controller는 Orca 조회, Gitflow 기준과 작업 위치 확인, 모델 선택, Worker 배정, 상태·결과 회수와 아래의 최소 Task 등록 부트스트랩만 맡는다. 운영 체계를 중복 만들지 않는다.
-- 단일 프로젝트·단일 Worker·짧고 동기적인 저위험 목표는 Main이 Controller 역할을 겸해 Orca Worker 하나를 직접 조율할 수 있다. 실제 조사·구현·문서 작성·검증은 Orca 관리 Worker가 수행한다. 복수 프로젝트, 병렬 Worker, 장기 실행, 고위험·복잡한 조율은 Project·Goal별 Controller를 둔다(POLICY C의 project_coordinator 경로, 기본 Sonnet 5.5 medium, Codex가 맡으면 Luna high). 정책 설명·상태 조회처럼 실행 목표가 없는 요청에는 Controller·Run을 만들지 않는다.
+- 단일 프로젝트·단일 Worker·짧고 동기적인 저위험 목표는 Main이 Controller 역할을 겸해 Orca Worker 하나를 직접 조율할 수 있다. 실제 조사·구현·문서 작성·검증은 Orca 관리 Worker가 수행한다. 복수 프로젝트, 병렬 Worker, 장기 실행, 고위험·복잡한 조율은 Project·Goal별 Controller를 둔다(POLICY C의 project_coordinator 경로, 기본 Luna high). 정책 설명·상태 조회처럼 실행 목표가 없는 요청에는 Controller·Run을 만들지 않는다.
 - Main 또는 Controller 중 하나만 각 Run의 소유자가 되며(run-create), 조율 명령은 해당 Run에 연결한다. 완료 알림·대기·정산·release는 [Orca Worker lifecycle rulebook](docs/orca-worker-lifecycle.md)을 따른다.
 
 - Main이 별도 Controller가 소유한 Run의 Orca 메일로 깨워지면 해당 Controller에 전달한다(Claude는 기존 하위 에이전트에 메시지 전달, 지원하지 않는 호스트는 같은 Run으로 Controller를 재시작). Main이 직접 소유한 Run의 메일은 Main이 확인한다.
@@ -99,19 +99,15 @@ POLICY B — 호스트에 중립적인 지휘와 실행
 - Orca에서 수행하는 업무에만 이 실행·모델 배정 정책을 적용한다. Orca 밖에서는 기존 전역·프로젝트 규칙을 유지한다.
 - Orca 컨텍스트를 확인할 수 없으면 소스 수정 전에 실행 방식을 확인한다. 환경 변수 하나나 CLI가 설치돼 있다는 이유만으로 Orca 업무라고 판정하지 않는다.
 
-POLICY C — 비용 우선 모델 라우팅 (정본: ai-agent-policy 저장소 policy/model-routing.json)
-- 기본 모델은 Sonnet과 Luna다. Opus·Sol은 승격 조건과 고위험 작업에만, Fable·Astra는 Opus·Sol까지 실패한 최종 단계에만 쓴다. 최우선 목표는 토큰 절약이고, 검증 수준은 낮추지 않는다.
-- Codex Luna·Sol·Astra와 프로젝트가 선택한 Terra 같은 Codex 계열은 고정 세대 번호를 복사하지 않는다. 정본 라우터가 실행 시 30일 이내에 갱신된 `CODEX_HOME/models_cache.json`에서 같은 계열의 최신 표시 가능·API 지원 모델을 찾는다. 기존 프로젝트 정책이 정한 계열과 effort는 유지하고 `--resolve-family <family> --effort <effort>`로 버전 ID만 최신화한다. 결과가 `pinned_fallback`이면 최신 세대를 확인하지 못한 것이므로 모델 캐시를 갱신한 뒤 재실행한다. 이 탐색은 캐시를 읽기만 하며 다운로드나 설정 변경은 하지 않는다.
-- 루트 오케스트레이터(Main)와 프로젝트 코디네이터(Controller)의 기본: Claude Sonnet 5.5 / medium, Codex가 맡으면 Luna 최신 지원 세대 / high. 사용자가 지정한 Controller가 있으면 그 지정을 우선한다(POLICY B).
-- Worker 배정 전에 작업 복잡도를 분류한다.
-  - LEVEL 1 단순(이름 변경, 단순 수정, 문서, 테스트 작성, 정형 코드, 단순 UI, 기존 패턴 반복, 일반 코드 분석): Codex Luna 최신 지원 세대 / medium. 대체 Sonnet 5.5.
-  - LEVEL 2 일반(기능, API, 데이터 로직, 프론트엔드, 일반 버그, 일반 코드 리뷰): Claude claude-sonnet-5-5 / medium. 대체 Luna high.
-  - LEVEL 3 복잡(다중 모듈, 상태 관리, 성능, 비동기, 통합, 복잡한 데이터 흐름, 아키텍처 설계): claude-sonnet-5-5 / high. 대체 Luna.
-  - LEVEL 4 고난도(중대한 구조 변경, 동시성, 반복 미해결 오류, 광범위 분석, 보안, 데이터 무결성): claude-opus-5-5 high 또는 Sol 최신 지원 세대 high. 필요할 때만 xhigh.
-  - 좁은 탐색·추출: Luna medium 또는 Haiku 4.5(effort 미지정).
-  - LEVEL 5 최종 단계(LEVEL 4가 2회 실패한 문제만): claude-fable-5-1 high 또는 Astra 최신 지원 세대 high. 시작 레벨·고위험 기본값·대체 모델로 쓰지 않는다.
+POLICY C — 품질 우선 모델 라우팅 (정본: ai-agent-policy 저장소 policy/model-routing.json)
+- 우선순위: 필수 고위험 전문 경로 → 프로젝트·사용자 명시 지정 → 단순 작업 조건 → Orca 작업 유형 → 복잡도 기본값. 이미 실행 중인 Main 모델은 시작 시 선택된 모델을 사용한다. 모델 배정에 맞춰 별도 역할이나 리뷰 게이트를 추가하지 않는다.
+- 새 Main은 `--role root_orchestrator`(Terra high → Sonnet high), Controller는 `--role project_coordinator`(Luna high → Terra high)를 후보로 사용한다. 사용자·프로젝트 지정을 보존한다. 상태 조회는 Orca 도구를 우선하고 요약이 필요하면 `log_summary`를 사용한다.
+- LEVEL 1 단순은 명확한 소범위·자동 검증 가능·저위험을 모두 충족할 때 Luna medium. LEVEL 2 일반 구현은 Luna high → Sonnet high, LEVEL 3 복잡 구현은 Sonnet high → Terra high. 세부 유형은 [Orca 역할별 라우팅](docs/orca-model-routing.md)을 따른다.
+- 기존 리뷰 단계는 구현자가 Codex이면 `code_review_codex`(Sonnet medium, 중요 시 `important_review_codex`), Claude이면 `code_review_claude`(Terra high → Luna high)를 선택한다. 기존 독립성·고위험 검증 조건을 적용한다.
+- LEVEL 4 고난도·고위험은 Opus high 또는 Sol high, LEVEL 5는 LEVEL 4에서 같은 문제를 두 번 실패한 경우에만 Fable high 또는 Astra high를 사용한다.
+- Codex 모델 ID는 30일 이내의 지원 모델 cache에서 계열별로 해석한다. 명시 지정은 `--resolve-family <family> --effort <effort>`로 계열과 effort를 유지한다. `pinned_fallback`이면 캐시를 갱신한 뒤 세대와 접근을 확인한다. 요청 모델과 실행 모델·effort를 각각 확인한다.
 - 저장소 checkout이 있으면 `python3 -B -m ai_policy.routing --host orca --task-type <유형>`(또는 `--level`, `--failures`, `--failure-kind`, `--available`, `--resolved`) 결과의 `action`을 먼저 확인한다. `blocked_no_available_model`(종료 40)·`handoff_to_lead`(종료 41)는 Worker를 시작하지 않고 Main에 보고하며, 그 밖의 action이면 `orca_worker_args`를 worker-start에 사용한다. 결과 JSON을 선택 이유로 기록한다. 상위·최종 단계 모델은 `usage report` 추천이나 대체 모델로 선택하지 않는다. 명령을 쓸 수 없으면 위 표를 직접 적용한다.
-- 승격: 같은 Worker가 검증 실패·원인 미파악·복잡도 급증으로 2회 실패하면 한 단계 올린다(Luna → Sonnet → Opus/Sol). 구조 위험·요구사항 모순·데이터 무결성 위험은 즉시 LEVEL 4. 환경·권한·외부 서비스·테스트 환경·모델 접근 오류는 승격하지 않고 같은 모델로 상태를 보존해 해결한다. LEVEL 4에서 다시 2회 실패하면 LEVEL 5(Fable/Astra)로 올리고, LEVEL 5도 2회 실패하면 자동 승격을 멈추고 Main에 넘긴다.
+- 승격: 같은 Worker가 검증 실패·원인 미파악·복잡도 급증으로 2회 실패하면 원인을 분류하고 독립 분석이 필요하면 직전 구현 도구에 맞는 `diagnose_codex_failure` 또는 `diagnose_claude_failure`를 사용한다. 고난도 판단이 남으면 해당 단계 승격을 적용한다. 구조 위험·요구사항 모순·데이터 무결성 위험은 즉시 LEVEL 4. 환경·권한·외부 서비스·테스트 환경·모델 접근 오류는 승격하지 않고 같은 모델로 상태를 보존해 해결한다. LEVEL 4에서 다시 2회 실패하면 LEVEL 5(Fable/Astra)로 올리고, LEVEL 5도 2회 실패하면 자동 승격을 멈추고 Main에 넘긴다.
 - 승격 인계는 전체 대화가 아니라 목표, 관련 파일, 현재 구현 상태, 오류, 시도 내용, 실패 가설, 필요한 판단만 전달한다. 상위 모델은 분석·핵심 결정 위주로 쓰고 구현은 가능하면 Sonnet·Luna Worker가 이어받는다. 해결 뒤 후속 Worker는 원래 LEVEL의 기본 모델로 돌아간다.
 - 사용 불가 모델은 설정의 대체 순서로 바꾸고 대체 사실을 기록한다. 대체 후보가 없으면 Worker를 시작하지 않고 작업 상태를 보존한 채 Main에 보고한다.
 - 토큰 절약: Worker에게 작업과 직접 관련된 파일·문서·설정만 전달하고, 이미 확보한 분석을 재사용하며, 같은 Goal의 Worker를 중복 생성하지 않는다. 나누는 비용이 더 크면 작업을 나누지 않는다. 끝난 Worker는 지원되는 방법으로 바로 정리하고 중간 보고는 짧게 한다. 동시 Worker는 3개, 동시 상위 모델 Worker는 1개 이하.

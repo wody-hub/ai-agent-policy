@@ -39,8 +39,16 @@ def load_config(path=None):
             for h in hosts:
                 if h not in entry: _bad()
                 _pick(c, entry[h])
-    for e in c['levels'].values():
-        for e2 in e.get('orca_alternatives', ()): _pick(c, e2)
+    for group in ('levels','roles'):
+        for e in c[group].values():
+            for e2 in e.get('orca_alternatives', ()): _pick(c, e2)
+    task_routes = c.get('orca_task_routes', {})
+    if not isinstance(task_routes, dict): _bad()
+    for key, entries in task_routes.items():
+        if key not in c['task_types'] or not isinstance(entries, list) or not entries: _bad()
+        for entry in entries:
+            _pick(c, entry)
+            if c['models'][entry[0]]['tier'] in c['limits'].get('premium_tiers', ()): _bad()
     if not set(c['levels'])<={'1','2','3','4','5'} or '4' not in c['levels']: _bad()
     if any(t not in (1,2,3,4) for t in c['task_types'].values()): _bad()
     for a, fb in c['fallbacks'].items():
@@ -153,21 +161,29 @@ def route(config, *, host, level=None, task_type=None, role=None, failures=0, fa
             reasons.append('failure_threshold_reached'); up(min((cur or config['roles'][role]['level'])+1, top))
         else: action='retry'; reasons.append('below_failure_threshold')
     lv=config['levels'][str(cur)] if cur else None
-    entry=lv[host] if lv else config['roles'][role][host]
+    task_choices = ()
+    if host == 'orca' and cur is not None and cur == base and not high_risk and cur < 4 and (level is None or level == config['task_types'].get(task_type)):
+        task_choices = config.get('orca_task_routes', {}).get(task_type, ())
+    selected = lv if lv else config['roles'][role]
+    entry = task_choices[0] if task_choices else selected[host]
+    alternatives = task_choices[1:] if task_choices else selected.get('orca_alternatives') if host == 'orca' else None
     palias, peffort=entry
     cands, chosen, fallback_used=[], None, False
     if cur==top and top>4: reasons.append('last_resort')
     if chosen is None:
         cands=[(palias, peffort)]
-        if cur and cur>=4 and host=='orca': cands+=[tuple(x) for x in lv.get('orca_alternatives', ())]
-        cands+=[(a, peffort) for a in config['fallbacks'].get(palias, ())]
+        if alternatives is not None:
+            cands.extend(tuple(x) for x in alternatives)
+        else:
+            cands.extend((a, peffort) for a in config['fallbacks'].get(palias, ()))
         seen=set()
         for a, e in cands:
             if a in seen or (config['models'][a]['tier']=='exceptional' and cur!=top): continue
             seen.add(a)
             model_id, model_resolution=_resolved_model(config['models'][a], model_catalog)
             if _usable(config, host, a, available, model_id):
-                if a==palias: chosen=(a, e, model_id, model_resolution)
+                if a==palias or alternatives is not None:
+                    chosen=(a, e, model_id, model_resolution)
                 else:
                     # A fallback takes the effort that model is assigned at this level on another host, if any.
                     same=[x[1] for x in (lv or {}).values() if isinstance(x, list) and x and x[0]==a]
