@@ -12,12 +12,12 @@
   "installer_schema": 1,
   "installer_version": "0.1.0",
   "schema": 1,
-  "source_commit": "1b03e95082d9907f376b6b6dac1ac54511cd3fe9",
+  "source_commit": "30476ee17e01d8120fdd173f43a2b5d5bbe0ecb9",
   "source_hashes": {
     "README.md": "f25d82095f61e60e7a21744cebf4b7c95df87022567692c19d687f653493b671",
-    "claude-code-global-model-routing-prompt.md": "1011bd47b1f2e31a10e7370cc75c2bd8f3faa3f9c6a089fca0dd67e3e7079729",
-    "codex-global-model-routing-prompt.md": "fa608f5d804db0679c68e89413db8b25fd00c1ca3e627378d8cbcb0af69a1457",
-    "orca-project-setup.md": "d2708eddfa6b39c7f10b6d88712d2db396da40302d28058e02bad160b6ae0d9d",
+    "claude-code-global-model-routing-prompt.md": "14f38e28e26b6d4d59c8981bfb093124fb1a221b8d5695e8c909c3d8142c6483",
+    "codex-global-model-routing-prompt.md": "aa5a55a51c53865ceb63f8dead147cddb9f975e9bcb40b69b4967f1d74ad4d44",
+    "orca-project-setup.md": "c0101302d2df247f64dbc185ac8da59eb6e4d9f69f789d5f879f0bf921e72850",
     "project-task-policy-setup.md": "fbd11dc9c6007fd9c09cc92aab100004793e411e7739b5e142692e14e2cbe165"
   },
   "version": "0.2.0"
