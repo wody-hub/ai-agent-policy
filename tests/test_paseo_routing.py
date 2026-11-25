@@ -165,4 +165,89 @@ class PaseoRoutingTests(unittest.TestCase):
         bad(lambda c: c['review_mode'].update(task_types=['nope']))
         bad(lambda c: c['review_mode'].update(codex={'features': {}}))
 
+LIVE_PROFILES=json.loads((Path(__file__).parent/'fixtures'/'paseo_live_profiles.json').read_text(encoding='utf-8'))
+LUNA7=[{'slug':'gpt-7-luna','visibility':'list','supported_in_api':True}]
+
+class PaseoProfileSpecTests(unittest.TestCase):
+    def test_live_profiles_derive_exactly_to_live_values(self):
+        # tests/fixtures/paseo_live_profiles.json is a checked-in copy of the live agentProfiles tuples (the real file is never read by tests).
+        self.assertEqual([p['id'] for p in LIVE_PROFILES], [k for k in C['paseo_profiles'] if not C['paseo_profiles'][k].get('provisional')])
+        for live in LIVE_PROFILES:
+            with self.subTest(profile=live['id']):
+                d=routing.paseo_profile_spec(C, live['id'])
+                self.assertEqual({k: d[k] for k in ('provider','model','modeId','thinkingOptionId')}, {k: live[k] for k in ('provider','model','modeId','thinkingOptionId')})
+                self.assertEqual(d['notes'], live['notes']); self.assertFalse(d['provisional'])
+
+    def test_provisional_profiles_and_no_sol_default(self):
+        d=routing.paseo_profile_spec(C, 'scout')
+        self.assertEqual((d['provider'], d['model'], d['modeId'], d['thinkingOptionId'], d['provisional']), ('claude','claude-haiku-5-5','plan',None,True))
+        d=routing.paseo_profile_spec(C, 'ui-verify'); self.assertEqual((d['model'], d['modeId'], d['thinkingOptionId']), ('gpt-6.1-terra','auto','high'))
+        d=routing.paseo_profile_spec(C, 'l5-alt-astra'); self.assertEqual((d['provider'], d['model'], d['thinkingOptionId'], d['provisional']), ('codex','gpt-6.2-astra','high',True))
+        self.assertEqual([k for k in C['paseo_profiles'] if '-sol' in routing.paseo_profile_spec(C, k)['model']], [])   # no Sol default profile
+        for k in C['paseo_profiles']:
+            m=routing.paseo_profile_spec(C, k)['model']
+            self.assertTrue(m.startswith(('claude-','gpt-')), m)       # exact ids only, never an alias
+
+    def test_orchestrator_with_only_codex_available_is_blocked(self):
+        for role in ('root_orchestrator','project_coordinator'):
+            for avail in (['luna'], ['terra'], ['luna','terra']):
+                self.assertEqual(r(role=role, available=avail)['action'], 'blocked_no_available_model')
+
+    def test_terra_lateral_names_no_profile(self):
+        x=r(level=2, failures=1, failure_kind='verification')
+        self.assertEqual((pick(x), x['lateral'], x['paseo_profile']), (('terra','high'), True, None))
+        self.assertIn('paseo_profile:none_configure_directly', x['reasons'])
+
+    def test_astra_at_l5_names_no_profile_while_provisional(self):
+        x=r(level=4, failures=2, failure_kind='verification', failed_family='claude')
+        self.assertEqual((pick(x), x['paseo_profile']), (('astra','high'), None))
+        self.assertTrue(C['paseo_profiles']['l5-alt-astra']['provisional'])
+        x=r(level=4, failures=2, failure_kind='verification'); self.assertEqual((pick(x), x['paseo_profile']), (('fable','high'), 'l5-last-resort'))
+
+    def test_newer_catalog_id_names_no_profile_pinned_to_older_id(self):
+        x=r(level=2, model_catalog=LUNA7)
+        self.assertEqual((x['model'], x['paseo_profile']), ('gpt-7-luna', None))
+        self.assertEqual(x['paseo_create_agent']['provider'], 'codex/gpt-7-luna')
+        self.assertEqual(r(level=2, model_catalog=[{'slug':'gpt-6-luna','visibility':'list','supported_in_api':True}])['paseo_profile'], 'dev-l2-general')
+
+    def test_profile_is_not_named_when_the_mode_differs(self):
+        # since C5 important_review runs in plan mode; dev-l3-complex is an auto-mode profile, so it must not be named
+        x=r(task_type='important_review')
+        self.assertEqual((pick(x), x['paseo_create_agent']['settings']['modeId'], x['paseo_profile']), (('sonnet','high'), 'plan', None))
+        self.assertEqual(r(task_type='multi_module')['paseo_profile'], 'dev-l3-complex')
+        x=r(task_type='review'); self.assertEqual((pick(x), x['paseo_profile']), (('sonnet','medium'), None))   # plan mode, no level profile matches
+        self.assertEqual(r(task_type='code_review_codex')['paseo_profile'], 'review-codex-work')
+
+    def test_profile_validation(self):
+        base=json.loads(routing.DEFAULT_CONFIG.read_text())
+        def bad(mut, raw=None):
+            c=json.loads(json.dumps(base)); mut(c)
+            with tempfile.TemporaryDirectory() as d:
+                p=Path(d)/'c.json'; p.write_text(raw(json.dumps(c)) if raw else json.dumps(c))
+                with self.assertRaises(PolicyError) as cm: routing.load_config(p)
+                self.assertEqual(str(cm.exception), 'routing_config_invalid')
+        P=lambda c: c['paseo_profiles']
+        bad(lambda c: P(c)['lookup'].update(level=1))                                  # two selectors
+        bad(lambda c: P(c)['dev-l1-simple'].update(task_types=['docs'], expect=['luna','medium']))
+        bad(lambda c: P(c).update(x={'description':'no selector, not provisional', 'expect':['luna','high']}))
+        bad(lambda c: P(c).update(x={'provisional':True, 'description':'selector-less without expect'}))
+        bad(lambda c: P(c).update(x={'provisional':'yes', 'expect':['luna','high']}))
+        bad(lambda c: P(c)['scout'].update(mode_id='Plan Mode'))
+        bad(lambda c: P(c)['lookup'].update(description=''))
+        bad(lambda c: P(c)['lookup'].update(surprise=1))
+        bad(lambda c: P(c)['dev-l2-general'].update(expect=['opus','high']))             # not a candidate of level 2
+        bad(lambda c: P(c)['dev-l2-general'].update(expect=['terra','xhigh']))
+        bad(lambda c: P(c)['review-codex-work'].update(expect=['opus','high']))          # not a route or level candidate of code_review_codex
+        bad(lambda c: P(c)['root-orchestrator'].update(expect=['terra','high']))         # not a candidate of the role
+        bad(lambda c: c['roles']['root_orchestrator'].update(paseo=['luna','high']))     # orchestrator on a tool without Paseo tools
+        bad(lambda c: P(c).update({'Bad_Id':{'level':1}}))
+        bad(lambda c: P(c).update(x={'level':True}))
+        bad(lambda c: c['hosts'].pop('paseo'))
+        bad(lambda c: None, raw=lambda t: t.replace('"lookup": {"role"', '"dev-l1-simple": {"level": 1}, "lookup": {"role"', 1))   # duplicate profile id
+        bad(lambda c: None, raw=lambda t: t.replace('"schema": 1,', '"schema": 1, "schema": 1,', 1))
+        # valid variants load
+        c=json.loads(json.dumps(base)); P(c)['dev-l2-general'].update(expect=['sonnet','high']); P(c)['x']={'level':2,'expect':['terra','high'],'provisional':True}
+        with tempfile.TemporaryDirectory() as d:
+            p=Path(d)/'c.json'; p.write_text(json.dumps(c)); routing.load_config(p)
+
 if __name__=='__main__': unittest.main()

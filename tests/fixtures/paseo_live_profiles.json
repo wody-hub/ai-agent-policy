@@ -1,0 +1,82 @@
+[
+ {
+  "id": "root-orchestrator",
+  "provider": "claude",
+  "model": "claude-sonnet-5-5",
+  "modeId": "auto",
+  "thinkingOptionId": "high",
+  "notes": "Approved 2026-11-25: orchestrators run on Claude (Codex has no Paseo tools). Coordinates only, never edits code. Policy default was Terra high."
+ },
+ {
+  "id": "project-coordinator",
+  "provider": "claude",
+  "model": "claude-sonnet-5-5",
+  "modeId": "auto",
+  "thinkingOptionId": "high",
+  "notes": "Approved 2026-11-25: Claude Sonnet high (policy alternate). Do not lower effort. Creates Codex/Claude workers from these profiles; workers have no Paseo tools if Codex."
+ },
+ {
+  "id": "dev-l1-simple",
+  "provider": "codex",
+  "model": "gpt-6-luna",
+  "modeId": "auto",
+  "thinkingOptionId": "medium",
+  "notes": "LEVEL 1: rename, simple edit, docs, tests, boilerplate, pattern repeat, task coordination."
+ },
+ {
+  "id": "dev-l2-general",
+  "provider": "codex",
+  "model": "gpt-6-luna",
+  "modeId": "auto",
+  "thinkingOptionId": "high",
+  "notes": "LEVEL 2: feature, api, frontend, bugfix, extension. Alternate: claude-sonnet-5-5 high."
+ },
+ {
+  "id": "dev-l3-complex",
+  "provider": "claude",
+  "model": "claude-sonnet-5-5",
+  "modeId": "auto",
+  "thinkingOptionId": "high",
+  "notes": "LEVEL 3: multi-module, state, performance, async, integration, refactor implementation, complex frontend. Alternate: gpt-6.1-terra high."
+ },
+ {
+  "id": "l4-critical",
+  "provider": "claude",
+  "model": "claude-opus-5-5",
+  "modeId": "auto",
+  "thinkingOptionId": "high",
+  "notes": "LEVEL 4: architecture major, concurrency, codebase-wide, security, data integrity, or escalation after 2 failures. Premium: max 1 concurrent, reason required. Alternate: gpt-6.2-sol high."
+ },
+ {
+  "id": "l5-last-resort",
+  "provider": "claude",
+  "model": "claude-fable-5-1",
+  "modeId": "auto",
+  "thinkingOptionId": "high",
+  "notes": "ONLY after LEVEL 4 failed twice on the same root problem. Never a starting level. Alternate: gpt-6.2-astra high."
+ },
+ {
+  "id": "review-codex-work",
+  "provider": "claude",
+  "model": "claude-sonnet-5-5",
+  "modeId": "plan",
+  "thinkingOptionId": "medium",
+  "notes": "Independent read-only review of Codex-implemented work. Important reviews: thinking high."
+ },
+ {
+  "id": "review-claude-work",
+  "provider": "codex",
+  "model": "gpt-6.1-terra",
+  "modeId": "auto",
+  "thinkingOptionId": "high",
+  "notes": "Independent review of Claude-implemented work. Instruct read-only. Alternate: gpt-6-luna high. Codex has no Paseo tools in Paseo; it reports by its final message."
+ },
+ {
+  "id": "lookup",
+  "provider": "codex",
+  "model": "gpt-6-luna",
+  "modeId": "auto",
+  "thinkingOptionId": "medium",
+  "notes": "Bounded lookup, extraction, log summary (log_summary: thinking low). No design or security."
+ }
+]

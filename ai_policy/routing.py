@@ -31,9 +31,14 @@ def _families(value, error):
     if any(x not in FAMILIES+('both',) for x in items): raise PolicyError(error)
     return set(FAMILIES) if 'both' in items else set(items)
 
+def _unique(pairs):
+    keys=[k for k,_ in pairs]
+    if len(keys)!=len(set(keys)): raise ValueError('duplicate_key')
+    return dict(pairs)
+
 def load_config(path=None):
     try:
-        c=json.loads(Path(path or DEFAULT_CONFIG).read_text(encoding='utf-8'))
+        c=json.loads(Path(path or DEFAULT_CONFIG).read_text(encoding='utf-8'), object_pairs_hook=_unique)
     except (OSError, ValueError): _bad()
     if not isinstance(c, dict) or c.get('schema')!=1 or any(not isinstance(c.get(k), dict) for k in REQUIRED): _bad()
     for m in c['models'].values():
@@ -82,18 +87,52 @@ def load_config(path=None):
     if any(k not in c['escalation'] for k in ('reasoning_failures_before_escalation','counted_failure_kinds','immediate_failure_kinds','non_model_failure_kinds','handoff_fields')): _bad()
     return c
 
+PROFILE_KEYS={'role','level','task_types','expect','description','provisional','mode_id'}
+PROFILE_SELECTORS=('role','level','task_types')
+
+def _entries(c, *entries):
+    return {tuple(e) for e in entries if isinstance(e, (list, tuple))}
+
+def _level_candidates(c, level):
+    lv=c['levels'].get(str(level), {})
+    return _entries(c, lv.get('paseo'), lv.get('lateral', {}).get('paseo'), *lv.get('paseo_alternatives', ()))
+
+def _profile_candidates(c, spec):
+    """(alias, effort) pairs a profile's selector can produce on the Paseo host."""
+    if 'role' in spec:
+        r=c['roles'][spec['role']]
+        return _entries(c, r.get('paseo'), *r.get('paseo_alternatives', ()))
+    if 'level' in spec: return _level_candidates(c, spec['level'])
+    return None   # task_types: per type, see _validate_paseo
+
 def _validate_paseo(c):
-    """Optional Paseo blocks: profile name map and review mode."""
+    """Optional Paseo blocks: managed profiles (paseo_profiles) and review mode."""
     profiles=c.get('paseo_profiles', {})
     if not isinstance(profiles, dict): _bad()
+    if profiles and 'paseo' not in c['hosts']: _bad()
+    paseo=c['hosts'].get('paseo', {})
     for name, spec in profiles.items():
-        if not isinstance(spec, dict): _bad()
+        if not isinstance(name, str) or not re.fullmatch(r'[a-z0-9][a-z0-9-]*', name) or not isinstance(spec, dict) or not set(spec)<=PROFILE_KEYS: _bad()
+        selectors=[k for k in PROFILE_SELECTORS if k in spec]
+        if len(selectors)>1: _bad()
+        if 'description' in spec and (not isinstance(spec['description'], str) or not spec['description']): _bad()
+        if not isinstance(spec.get('provisional', False), bool): _bad()
+        if 'mode_id' in spec and (not isinstance(spec['mode_id'], str) or not re.fullmatch(r'[a-z0-9-]+', spec['mode_id'])): _bad()
         if 'role' in spec and spec['role'] not in c['roles']: _bad()
-        if 'level' in spec and str(spec['level']) not in c['levels']: _bad()
-        for t in spec.get('task_types', ()):
-            if t not in c['task_types']: _bad()
-        if 'task_types' in spec: _pick(c, spec.get('expect'))
-        if not any(k in spec for k in ('role','level','task_types')): _bad()
+        if 'level' in spec and (isinstance(spec['level'], bool) or not isinstance(spec['level'], int) or str(spec['level']) not in c['levels']): _bad()
+        if 'task_types' in spec and (not isinstance(spec['task_types'], list) or not spec['task_types'] or any(t not in c['task_types'] for t in spec['task_types'])): _bad()
+        if not selectors and not (spec.get('provisional') is True and 'expect' in spec): _bad()
+        if 'task_types' in spec and 'expect' not in spec: _bad()
+        if 'expect' in spec:
+            _pick(c, spec['expect'])
+            want=tuple(spec['expect'])
+            if 'task_types' in spec:
+                for t in spec['task_types']:
+                    routes=c.get(paseo.get('task_routes_key') or 'orca_task_routes', {}).get(t, ())
+                    if want not in _entries(c, *routes)|_level_candidates(c, c['task_types'][t]): _bad()
+            elif selectors and want not in _profile_candidates(c, spec): _bad()
+        alias, effort=_profile_target(c, spec)
+        if 'role' in spec and c['roles'][spec['role']].get('orchestrator') is True and c['models'][alias]['tool'] not in paseo.get('orchestrator_tools', paseo.get('tools', ())): _bad()
     review=c.get('review_mode')
     if review is not None:
         if not isinstance(review, dict): _bad()
@@ -101,6 +140,24 @@ def _validate_paseo(c):
             if not isinstance(review.get(key, []), list) or any(t not in c['task_types'] for t in review.get(key, [])): _bad()
         for tool in ('claude','codex'):
             if tool in review and (not isinstance(review[tool], dict) or not isinstance(review[tool].get('modeId'), str)): _bad()
+
+def _profile_target(c, spec):
+    """(alias, effort) a profile asks for: expect, else the selector's paseo entry. Validated specs only."""
+    if 'expect' in spec: return tuple(spec['expect'])
+    entry=c['roles'][spec['role']]['paseo'] if 'role' in spec else c['levels'][str(spec['level'])]['paseo']
+    return tuple(entry)
+
+def paseo_profile_spec(config, profile_id):
+    """Derived Paseo profile fields for a managed profile. model is always the policy's exact id, never an alias."""
+    spec=config['paseo_profiles'][profile_id]
+    alias, effort=_profile_target(config, spec)
+    m=config['models'][alias]
+    mode=spec.get('mode_id')
+    if mode is None:
+        rm=config.get('review_mode') or {}
+        types=spec.get('task_types')
+        mode=rm[m['tool']]['modeId'] if types and set(types)<=set(rm.get('task_types', ())) and m['tool'] in rm else config['hosts']['paseo'].get('default_mode_id', 'auto')
+    return {'provider':m['tool'],'model':m['id'],'modeId':mode,'thinkingOptionId':effort,'notes':spec.get('description'),'provisional':bool(spec.get('provisional', False))}
 
 def _validate_cross_family_review(c):
     """cross_family_review (independence) and review_mode (write-block) must cover the same review task types."""
@@ -187,16 +244,17 @@ def _paseo_review(config, task_type, tool):
     out['write_block_required']=task_type in rm.get('write_block_required_task_types', ())
     return out
 
-def _paseo_profile(config, role, level, task_type, alias, effort):
-    """Profile whose assumed (alias, effort) equals the routed one; otherwise None (configure directly)."""
+def _paseo_profile(config, role, level, task_type, effort, model_id, mode_id):
+    """Managed, non-provisional profile whose derived start values equal the routed ones (model id, mode, thinking); otherwise None."""
     for name, spec in config.get('paseo_profiles', {}).items():
-        if 'task_types' in spec:
-            hit=task_type in spec['task_types'] and (alias, effort)==tuple(spec['expect'])
-        elif 'role' in spec:
-            hit=level is None and role==spec['role'] and (alias, effort)==tuple(config['roles'][role]['paseo'])
-        else:
-            hit=level is not None and level==spec['level'] and (alias, effort)==tuple(config['levels'][str(level)]['paseo'])
-        if hit: return name
+        if spec.get('provisional'): continue
+        if 'task_types' in spec: hit=task_type in spec['task_types']
+        elif 'role' in spec: hit=level is None and role==spec['role']
+        elif 'level' in spec: hit=level is not None and level==spec['level']
+        else: hit=False
+        if not hit: continue
+        d=paseo_profile_spec(config, name)
+        if (d['model'], d['modeId'], d['thinkingOptionId'])==(model_id, mode_id, effort): return name
     return None
 
 def _effort(m, want):
@@ -351,7 +409,7 @@ def route(config, *, host, level=None, task_type=None, role=None, failures=0, fa
                 out['premium']=out['premium_requires_reason']=out['degraded_independence']=False
             else:
                 out['paseo_create_agent']=_paseo_start_config(config, tool, model_id, e, review)
-                profile=_paseo_profile(config, role, cur, task_type, a, e)
+                profile=_paseo_profile(config, role, cur, task_type, e, model_id, out['paseo_create_agent']['settings']['modeId'])
                 out['paseo_profile']=profile
                 reasons.append('paseo_profile:'+(profile or 'none_configure_directly'))
     if action=='handoff_to_lead': out['orca_worker_args']=[]  # stop: nothing further to launch automatically

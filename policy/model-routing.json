@@ -109,18 +109,21 @@
     "blocking_types": ["security_review"],
     "note": "With an implementer_family the reviewer must be the other family. If it is unavailable ordinary reviews proceed with degraded_independence=true; blocking_types and high-risk reviews are blocked. task_types must equal review_mode.task_types (validated by the loader)."
   },
-  "paseo_profiles_note": "Names only. The real provider/model/mode/thinking of each profile lives in the user's Paseo configuration (list_profiles). expect is the (alias, effort) this map assumes for a task_types profile; role/level profiles expect the host entry. A router result that differs from the expectation reports no profile and the Owner configures create_agent directly.",
+  "paseo_profiles_note": "Canonical source for the Paseo agent profiles that `python3 -B -m ai_policy.paseo check|sync` manages (managed set = the keys of paseo_profiles). Each profile has at most one selector (role | level | task_types with expect). expect is [alias, effort] (effort may be null) and must be a candidate of the selector; without expect the value is the role's or level's paseo entry. A profile with no selector must be provisional and carry expect. Derived by paseo_profile_spec: provider = the model's tool, model = the exact policy id, modeId = mode_id, else review_mode[tool].modeId when every task type is a review_mode type, else hosts.paseo.default_mode_id, thinkingOptionId = effort, notes = description. provisional profiles are never named by the router and are created only by sync --include-provisional. features (plan_mode) are not managed.",
   "paseo_profiles": {
-    "root-orchestrator":   {"role": "root_orchestrator"},
-    "project-coordinator": {"role": "project_coordinator"},
-    "dev-l1-simple":       {"level": 1},
-    "dev-l2-general":      {"level": 2},
-    "dev-l3-complex":      {"level": 3},
-    "l4-critical":         {"level": 4},
-    "l5-last-resort":      {"level": 5},
-    "review-codex-work":   {"task_types": ["code_review_codex"], "expect": ["sonnet", "medium"]},
-    "review-claude-work":  {"task_types": ["code_review_claude"], "expect": ["terra", "high"]},
-    "lookup":              {"role": "lookup"}
+    "root-orchestrator": {"role": "root_orchestrator", "description": "Approved 2026-11-25: orchestrators run on Claude (Codex has no Paseo tools). Coordinates only, never edits code. Policy default was Terra high."},
+    "project-coordinator": {"role": "project_coordinator", "description": "Approved 2026-11-25: Claude Sonnet high (policy alternate). Do not lower effort. Creates Codex/Claude workers from these profiles; workers have no Paseo tools if Codex."},
+    "dev-l1-simple": {"level": 1, "description": "LEVEL 1: rename, simple edit, docs, tests, boilerplate, pattern repeat, task coordination."},
+    "dev-l2-general": {"level": 2, "description": "LEVEL 2: feature, api, frontend, bugfix, extension. Alternate: claude-sonnet-5-5 high."},
+    "dev-l3-complex": {"level": 3, "description": "LEVEL 3: multi-module, state, performance, async, integration, refactor implementation, complex frontend. Alternate: gpt-6.1-terra high."},
+    "l4-critical": {"level": 4, "description": "LEVEL 4: architecture major, concurrency, codebase-wide, security, data integrity, or escalation after 2 failures. Premium: max 1 concurrent, reason required. Alternate: gpt-6.2-sol high."},
+    "l5-last-resort": {"level": 5, "description": "ONLY after LEVEL 4 failed twice on the same root problem. Never a starting level. Alternate: gpt-6.2-astra high."},
+    "review-codex-work": {"task_types": ["code_review_codex"], "expect": ["sonnet", "medium"], "description": "Independent read-only review of Codex-implemented work. Important reviews: thinking high."},
+    "review-claude-work": {"task_types": ["code_review_claude"], "expect": ["terra", "high"], "description": "Independent review of Claude-implemented work. Instruct read-only. Alternate: gpt-6-luna high. Codex has no Paseo tools in Paseo; it reports by its final message."},
+    "lookup": {"role": "lookup", "description": "Bounded lookup, extraction, log summary (log_summary: thinking low). No design or security."},
+    "scout": {"expect": ["haiku", null], "mode_id": "plan", "provisional": true, "description": "Provisional, no profile yet: read-only file/symbol scouting on Haiku (plan mode). Effort not set."},
+    "ui-verify": {"expect": ["terra", "high"], "provisional": true, "description": "Provisional, no profile yet, unmeasured: UI verification on Terra high."},
+    "l5-alt-astra": {"level": 5, "expect": ["astra", "high"], "provisional": true, "description": "Provisional, no profile yet: LEVEL 5 alternate (Astra) used when the failed LEVEL 4 family was Claude. Same last-resort rules as l5-last-resort."}
   },
   "review_mode": {
     "task_types": ["review", "code_review_codex", "code_review_claude", "important_review", "important_review_codex", "security_review"],
