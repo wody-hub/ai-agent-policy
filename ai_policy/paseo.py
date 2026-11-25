@@ -15,7 +15,15 @@ from .bundle import PolicyError, digest, encode
 from .routing import _profile_target, load_codex_model_catalog, load_config, paseo_profile_spec, resolve_codex_family
 
 DEFAULT_PASEO_CONFIG=Path.home()/'.paseo'/'config.json'
-DEFAULT_STATE_DIR=Path(__file__).resolve().parents[1]/'.local-artifacts'/'paseo-sync'
+
+def default_state_dir(config_path):
+    """Per-user state and backup directory keyed by the config's absolute path; never inside a repository.
+    Backups are full copies of the config and can hold secrets."""
+    xdg=os.environ.get('XDG_STATE_HOME')
+    base=Path(xdg) if xdg and os.path.isabs(xdg) else Path.home()/'.local'/'state'
+    return base/'ai-policy'/'paseo-sync'/digest(os.path.abspath(config_path).encode('utf-8'))[:8]
+
+def _state_dir(a): return a.state_dir if a.state_dir is not None else default_state_dir(a.config)
 ALIAS_NOTE='claude ids are pinned exact ids; whether an alias now resolves elsewhere needs a live Paseo list_models check (not done offline)'
 
 def _generation(model_id):
@@ -136,7 +144,14 @@ def _private_dir(path, error, create=False):
     try: st=os.lstat(path)
     except FileNotFoundError:
         if not create: return False
-        os.makedirs(path, mode=0o700, exist_ok=True); os.chmod(path, 0o700); st=os.lstat(path)
+        missing=[]
+        p=Path(path)
+        while not os.path.lexists(p): missing.append(p); p=p.parent
+        for d in reversed(missing):   # every created parent is private too
+            try: os.mkdir(d, 0o700)
+            except FileExistsError: pass
+            os.chmod(d, 0o700)
+        st=os.lstat(path)
     if stat.S_ISLNK(st.st_mode) or not stat.S_ISDIR(st.st_mode) or st.st_uid!=os.getuid() or st.st_mode & 0o077: raise PolicyError(error)
     return True
 
@@ -297,13 +312,13 @@ def run_sync(a):
     overwrite={x for chunk in (a.overwrite or []) for x in chunk.split(',') if x}
     if overwrite-set(config['paseo_profiles']): raise PolicyError('overwrite_unknown_id')
     raw=_read_bytes(a.config)
-    plan=plan_sync(raw, a.config, config, model_catalog=catalog, state=_load_state(a.state_dir), include_provisional=a.include_provisional, overwrite=overwrite)
+    plan=plan_sync(raw, a.config, config, model_catalog=catalog, state=_load_state(_state_dir(a)), include_provisional=a.include_provisional, overwrite=overwrite)
     _verify_hash(a.plan_sha256, plan)
     body=plan['body']; code=1 if body['conflicts'] or body['refusals'] else 0
     if a.plan_sha256 is None: return _result(body, plan['plan_sha256'], False, dry_run=True), code
     if not plan['writes']: return _result(body, plan['plan_sha256'], False, dry_run=False), code
     mode=stat.S_IMODE(os.stat(a.config).st_mode)
-    backup=_backup(a.state_dir, raw)
+    backup=_backup(_state_dir(a), raw)
     _write_atomic(a.config, plan['new_bytes'], digest(raw), mode)
     after=_read_bytes(a.config)
     try: _, now=_parse(after)
@@ -311,8 +326,8 @@ def run_sync(a):
     got={x['id']:x for x in now}
     if after!=plan['new_bytes'] or any(got.get(pid, {}).get(f, KeyError)!=v for pid, want in plan['writes'].items() for f, v in want.items()):
         raise PolicyError('post_write_verification_failed')
-    state=_load_state(a.state_dir); state.update({pid: dict(v) for pid, v in plan['writes'].items()})
-    _save_state(a.state_dir, state, digest(after))
+    state=_load_state(_state_dir(a)); state.update({pid: dict(v) for pid, v in plan['writes'].items()})
+    _save_state(_state_dir(a), state, digest(after))
     return _result(body, plan['plan_sha256'], True, dry_run=False, backup=str(backup)), code
 
 # ---- restore -----------------------------------------------------------------------------------------------------------------------------
@@ -338,7 +353,7 @@ def _resolve_backup(state_dir, arg):
     return path, raw
 
 def run_restore(a):
-    path, braw=_resolve_backup(a.state_dir, a.restore)
+    path, braw=_resolve_backup(_state_dir(a), a.restore)
     raw=_read_bytes(a.config)   # the file being replaced may itself be broken; only its bytes matter
     body={'schema':1,'operation':'restore','config_path':os.path.abspath(a.config),'config_sha256':digest(raw),'backup':path.name,'backup_sha256':digest(braw),
           'changes':int(raw!=braw)}
@@ -347,7 +362,7 @@ def run_restore(a):
     if a.plan_sha256 is None: return _result(body, plan['plan_sha256'], False, dry_run=True), 0
     if raw==braw: return _result(body, plan['plan_sha256'], False, dry_run=False), 0
     mode=stat.S_IMODE(os.stat(a.config).st_mode)
-    pre=_backup(a.state_dir, raw)   # the file being replaced stays recoverable
+    pre=_backup(_state_dir(a), raw)   # the file being replaced stays recoverable
     _write_atomic(a.config, braw, digest(raw), mode)
     if _read_bytes(a.config)!=braw: raise PolicyError('post_write_verification_failed')
     return _result(body, plan['plan_sha256'], True, dry_run=False, pre_restore_backup=str(pre)), 0
@@ -363,7 +378,7 @@ def main(argv=None):
     s.add_argument('--config', type=Path, default=DEFAULT_PASEO_CONFIG, help='Paseo config.json (default ~/.paseo/config.json)')
     s.add_argument('--policy', help='model-routing.json; defaults to the repository policy')
     s.add_argument('--model-catalog', help='Codex model cache JSON; defaults to CODEX_HOME/models_cache.json')
-    s.add_argument('--state-dir', type=Path, default=DEFAULT_STATE_DIR, help='last-applied state and backups (default <repo>/.local-artifacts/paseo-sync)')
+    s.add_argument('--state-dir', type=Path, default=None, help='last-applied state and backups (default ${XDG_STATE_HOME:-~/.local/state}/ai-policy/paseo-sync/<sha256(abs config path)[:8]>)')
     s.add_argument('--include-provisional', action='store_true', help='also create missing provisional profiles')
     s.add_argument('--overwrite', action='append', metavar='ID[,ID...]', help='write these managed profiles even if hand-edited (never overrides refused:*)')
     s.add_argument('--plan-sha256', help='apply the plan whose hash a dry run printed; recomputed and refused on any difference')

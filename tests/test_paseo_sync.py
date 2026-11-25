@@ -281,8 +281,35 @@ class SyncRuleTests(unittest.TestCase):
         (e.state/'state.json').write_text('{"schema":1,"profiles":{"l4-critical":{"modeId":"plan"}}}'); os.chmod(e.state, 0o755)
         self.assertEqual(e.run()[1]['error'], 'state_dir_unsafe')
 
-    def test_default_state_dir_is_inside_repo_local_artifacts(self):
-        self.assertEqual(paseo.DEFAULT_STATE_DIR, Path(paseo.__file__).resolve().parents[1]/'.local-artifacts'/'paseo-sync')
+    def test_default_state_dir_is_per_user_keyed_by_config_path_and_never_in_the_repo(self):
+        repo=Path(paseo.__file__).resolve().parents[1]
+        with tempfile.TemporaryDirectory() as d, mock.patch.dict(os.environ, {'XDG_STATE_HOME': d}):
+            c1, c2=Path(d)/'a'/'config.json', Path(d)/'b'/'config.json'
+            s1, s2=paseo.default_state_dir(c1), paseo.default_state_dir(c2)
+            self.assertEqual(s1, Path(d)/'ai-policy'/'paseo-sync'/sha(str(os.path.abspath(c1)).encode())[:8])
+            self.assertNotEqual(s1, s2); self.assertEqual(s1, paseo.default_state_dir(str(c1)))
+            self.assertNotIn(repo, s1.parents)
+        with mock.patch.dict(os.environ, {'XDG_STATE_HOME': ''}):
+            self.assertEqual(paseo.default_state_dir('/x/config.json').parent, Path.home()/'.local'/'state'/'ai-policy'/'paseo-sync')
+        with mock.patch.dict(os.environ, {'XDG_STATE_HOME': 'relative/dir'}):   # a relative XDG path is ignored
+            self.assertEqual(paseo.default_state_dir('/x/config.json').parent, Path.home()/'.local'/'state'/'ai-policy'/'paseo-sync')
+        self.assertIn('.local-artifacts/', (repo/'.gitignore').read_text().split())
+
+    def test_default_state_dir_is_used_without_state_dir_flag_and_created_private(self):
+        e=Env(self, live_like(edited('l4-critical', modeId='plan')), catalog=FRESH_CATALOG())
+        with tempfile.TemporaryDirectory() as xdg, mock.patch.dict(os.environ, {'XDG_STATE_HOME': xdg}):
+            os.chmod(xdg, 0o755)
+            base=['sync','--config',str(e.cfg),'--model-catalog',str(e.catalog)]
+            b=io.StringIO()
+            with contextlib.redirect_stdout(b): code=paseo.main(base)      # dry run creates nothing
+            self.assertEqual(sorted(x.name for x in Path(xdg).iterdir()), [])
+            b=io.StringIO()
+            with contextlib.redirect_stdout(b): paseo.main(base+['--overwrite','l4-critical'])
+            h=json.loads(b.getvalue())['plan_sha256']
+            with contextlib.redirect_stdout(io.StringIO()): self.assertEqual(paseo.main(base+['--overwrite','l4-critical','--plan-sha256',h]), 0)
+            sd=paseo.default_state_dir(e.cfg)
+            for d in (Path(xdg)/'ai-policy', Path(xdg)/'ai-policy'/'paseo-sync', sd, sd/'backups'): self.assertEqual(stat.S_IMODE(d.stat().st_mode), 0o700, d)
+            self.assertEqual(len(list((sd/'backups').iterdir())), 1); self.assertTrue((sd/'state.json').exists())
 
 class RestoreTests(unittest.TestCase):
     def setUp(self):
