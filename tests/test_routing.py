@@ -301,4 +301,77 @@ class LateralStepTests(unittest.TestCase):
             x=r(host='paseo', role=role, failures=1, failure_kind='verification')
             self.assertEqual((pick(x), x['lateral']), (('sonnet','high'), False))
 
+class FailedFamilyTests(unittest.TestCase):
+    def l5(self, host='paseo', **kw): return r(host=host, level=4, failures=2, failure_kind='verification', **kw)
+
+    def test_opposite_family_of_last_l4_failure(self):
+        for host in ('orca','paseo'):
+            self.assertEqual(pick(self.l5(host, failed_family='claude')), ('astra','high'))
+            self.assertEqual(pick(self.l5(host, failed_family='codex')), ('fable','high'))
+            self.assertEqual(pick(self.l5(host, failed_family=['claude','codex'])), ('fable','high'))
+            self.assertEqual(pick(self.l5(host, failed_family='both')), ('fable','high'))
+            self.assertEqual(pick(self.l5(host)), ('fable','high'))
+            self.assertEqual(pick(self.l5(host, failed_family=[])), ('fable','high'))
+        x=self.l5(failed_family='claude')
+        self.assertEqual((x['level'], x['action'], x['premium'], x['fallback_used']), (5, 'escalate', True, False))
+        self.assertIn('l5_opposite_family:astra', x['reasons'])
+        self.assertEqual(x['paseo_create_agent']['provider'], 'codex/gpt-6.2-astra')
+        # level 5 retry/handoff keep the same selection
+        x=r(host='paseo', level=5, failures=1, failure_kind='verification', failed_family='claude'); self.assertEqual((x['action'], x['alias']), ('retry','astra'))
+
+    def test_preference_is_soft_and_host_bound(self):
+        x=self.l5(failed_family='claude', available=['fable'])
+        self.assertEqual(x['alias'], 'fable'); self.assertIn('l5_opposite_family_unavailable', x['reasons'])
+        self.assertEqual(pick(self.l5('claude', failed_family='claude')), ('fable','high'))   # claude host cannot run Astra
+        self.assertEqual(pick(self.l5('codex', failed_family='codex')), ('astra','high'))
+        self.assertEqual(pick(self.l5('codex', failed_family='claude')), ('astra','high'))
+
+    def test_last_resort_is_still_never_a_starting_level(self):
+        for kw in ({}, {'failed_family':'claude'}, {'failed_family':'codex'}):
+            with self.assertRaisesRegex(PolicyError, 'last_resort_requires_escalation'): r(host='paseo', level=5, **kw)
+        self.assertEqual(r(host='paseo', level=4, failures=1, failure_kind='verification', failed_family='claude')['level'], 4)  # one L4 failure: retry at L4
+        self.assertEqual(r(host='paseo', level=4, failed_family='claude')['alias'], 'opus')
+        self.assertEqual(r(host='paseo', task_type='security', failed_family='claude')['alias'], 'opus')
+        for bad in ('gemini', ['claude','gemini'], 3):
+            with self.assertRaisesRegex(PolicyError, 'unknown_failed_family'): self.l5(failed_family=bad)
+
+    def test_sol_not_chosen_when_it_already_failed(self):
+        self.assertEqual(r(host='orca', level=4, available=['sol'])['alias'], 'sol')
+        x=r(host='orca', level=4, available=['sol'], failed_models=['sol'])
+        self.assertEqual((x['action'], x['alias']), ('blocked_no_available_model', None)); self.assertIn('excluded_failed_model:sol', x['reasons'])
+        self.assertEqual(r(host='orca', level=4, failed_models=['sol'])['alias'], 'opus')
+        self.assertEqual(r(host='codex', level=4, failed_models=['gpt-6.2-sol'])['action'], 'blocked_no_available_model')
+        self.assertEqual(r(host='orca', level=3, failed_models=['sol'])['alias'], 'sonnet')   # only the L4 choice is restricted
+        # any failed model is skipped at L4, and Paseo is not special
+        x=r(host='paseo', level=4, failed_models='opus'); self.assertEqual(x['alias'], 'sol'); self.assertIn('excluded_failed_model:opus', x['reasons'])
+        self.assertEqual(r(host='paseo', level=4, failed_models=['opus','sol'])['action'], 'blocked_no_available_model')
+
+class PremiumFlagTests(unittest.TestCase):
+    def test_premium_choices_require_reason(self):
+        for kw in ({'host':'orca','level':4},{'host':'paseo','level':4},{'host':'codex','level':4},{'host':'paseo','level':4,'failures':2,'failure_kind':'verification'},
+                   {'host':'codex','level':4,'failures':2,'failure_kind':'verification'},{'host':'orca','level':4,'available':['sol']}):
+            with self.subTest(kw=kw):
+                x=r(**kw); self.assertTrue(x['premium'] and x['premium_requires_reason'])
+        for kw in ({'host':'paseo','level':2},{'host':'orca','level':2,'failures':1,'failure_kind':'verification'}):
+            x=r(**kw); self.assertFalse(x['premium'] or x['premium_requires_reason'])
+        self.assertEqual(C['limits']['max_concurrent_premium_workers'], 1)
+        self.assertFalse(r(host='orca', task_type='docs', available=[])['premium_requires_reason'])
+        self.assertFalse(r(host='paseo', task_type='security_review', available=['luna'])['premium_requires_reason'])  # blocked: nothing to launch
+
+class CliNewInputsTests(unittest.TestCase):
+    def test_cli_passes_new_inputs(self):
+        def run(*a):
+            b=io.StringIO()
+            with contextlib.redirect_stdout(b): code=routing.main(list(a))
+            return code, json.loads(b.getvalue())
+        nc=('--model-catalog','/nonexistent')
+        code, x=run('--host','paseo','--level','4','--failures','2','--failure-kind','verification','--failed-family','claude',*nc)
+        self.assertEqual((code, x['alias'], x['orca_worker_args']), (0, 'astra', []))
+        code, x=run('--host','orca','--level','4','--failures','2','--failure-kind','verification','--failed-family','claude',*nc)
+        self.assertEqual((code, x['alias'], x['orca_worker_args'][:4]), (0, 'astra', ['--agent','codex','--model','gpt-6.2-astra']))
+        code, x=run('--host','orca','--level','4','--available','sol','--failed-model','sol',*nc)
+        self.assertEqual((code, x['action']), (40, 'blocked_no_available_model'))
+        self.assertEqual(run('--host','paseo','--level','4','--failed-family','gemini',*nc), (30, {'schema':1,'error':'unknown_failed_family'}))
+        self.assertEqual(run('--host','paseo','--task-type','review','--implementer-family','gemini',*nc), (30, {'schema':1,'error':'unknown_implementer_family'}))
+
 if __name__=='__main__': unittest.main()

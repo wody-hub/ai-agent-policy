@@ -21,6 +21,16 @@ def _pick(config, entry):
     m=config['models'].get(alias) if isinstance(alias, str) else None
     if m is None or not (effort is None or effort in m.get('efforts', ())): _bad()
 
+FAMILIES=('claude','codex')
+
+def _families(value, error):
+    if value is None: return set()
+    items=[value] if isinstance(value, str) else value
+    try: items=list(items)
+    except TypeError: raise PolicyError(error)
+    if any(x not in FAMILIES+('both',) for x in items): raise PolicyError(error)
+    return set(FAMILIES) if 'both' in items else set(items)
+
 def load_config(path=None):
     try:
         c=json.loads(Path(path or DEFAULT_CONFIG).read_text(encoding='utf-8'))
@@ -185,12 +195,16 @@ def _effort(m, want):
     if want in ef: return want
     return 'medium' if 'medium' in ef else ef[len(ef)//2]
 
-def route(config, *, host, level=None, task_type=None, role=None, failures=0, failure_kind=None, available=None, resolved=False, model_catalog=None):
+def route(config, *, host, level=None, task_type=None, role=None, failures=0, failure_kind=None, available=None, resolved=False, model_catalog=None,
+          failed_family=None, failed_models=(), implementer_family=None):
     """LEVEL 5 (exceptional tier) is reachable only by escalation from LEVEL 4, never as a starting level."""
     if host not in config['hosts']: raise PolicyError('unknown_host')
     if (role is not None)==(task_type is not None or level is not None): raise PolicyError('invalid_selector')
     esc, high_risk, reasons=config['escalation'], False, []
     if available is not None: available=set(available)
+    failed_families=_families(failed_family, 'unknown_failed_family')
+    if implementer_family is not None and implementer_family not in FAMILIES: raise PolicyError('unknown_implementer_family')
+    failed_models=set([failed_models] if isinstance(failed_models, str) else failed_models or ())
     kinds=set(esc['counted_failure_kinds'])|set(esc['immediate_failure_kinds'])|set(esc['non_model_failure_kinds'])
     if failure_kind is not None and failure_kind not in kinds: raise PolicyError('unknown_failure_kind')
     base=None
@@ -257,11 +271,20 @@ def route(config, *, host, level=None, task_type=None, role=None, failures=0, fa
         cands.extend(tuple(x) for x in alternatives)
     else:
         cands.extend((a, peffort) for a in config['fallbacks'].get(palias, ()))
+    if cur==top and top>4 and len(failed_families)==1:
+        # LEVEL 5 prefers the family that did not fail last at LEVEL 4 (soft preference; both/unknown keeps the host default).
+        cands.sort(key=lambda c: config['models'][c[0]]['tool'] in failed_families)
+        if cands[0][0]!=palias: reasons.append('l5_opposite_family:'+cands[0][0])
+        palias, peffort=cands[0]
+        if not any(config['models'][a]['tool'] not in failed_families and _usable(config, host, a, available, _resolved_model(config['models'][a], model_catalog)[0], False) for a, _ in cands):
+            reasons.append('l5_opposite_family_unavailable')
     def select(cs):
         seen=set()
         for a, e in cs:
             if a in seen or (config['models'][a]['tier']=='exceptional' and cur!=top): continue
             seen.add(a)
+            if cur==4 and (a in failed_models or config['models'][a]['id'] in failed_models):
+                reasons.append('excluded_failed_model:'+a); continue
             model_id, model_resolution=_resolved_model(config['models'][a], model_catalog)
             if _usable(config, host, a, available, model_id, orchestrator):
                 if a==palias or alternatives is not None:
@@ -274,7 +297,7 @@ def route(config, *, host, level=None, task_type=None, role=None, failures=0, fa
     if chosen and chosen[0]!=palias: fallback_used=True
     out={'schema':1,'host':host,'level':cur,'level_name':lv['name'] if lv else None,'task_type':task_type,'role':role,
          'alias':None,'tool':None,'agent':None,'model':None,'model_resolution':None,'effort':None,'tier':None,'action':action,'escalated':escalated,
-         'fallback_used':fallback_used,'high_risk':high_risk,'human_gate':high_risk,'premium':False,'lateral':lateral is not None,'preserve_state':False,
+         'fallback_used':fallback_used,'high_risk':high_risk,'human_gate':high_risk,'premium':False,'premium_requires_reason':False,'lateral':lateral is not None,'preserve_state':False,
          'attempts_reset':bool(esc.get('attempt_count_resets_on_model_change', False)),'reasons':reasons,'handoff_fields':[],'orca_worker_args':[]}
     if chosen is None:
         out['action']=action='blocked_no_available_model'; reasons.append('no_available_model')
@@ -283,6 +306,7 @@ def route(config, *, host, level=None, task_type=None, role=None, failures=0, fa
         out.update(alias=a, tool=m['tool'], agent=m['agent'], model=model_id, model_resolution=model_resolution, effort=e, tier=m['tier'],
                    premium=m['tier'] in config['limits'].get('premium_tiers', ()),
                    orca_worker_args=['--agent', m['agent'], '--model', model_id]+(['--effort', e] if e else []))
+        out['premium_requires_reason']=out['premium'] and bool(config['limits'].get('premium_requires_reason', True))
     if host=='paseo':
         # Paseo has no worker-start arguments; the start configuration is create_agent fields.
         out['orca_worker_args']=[]
@@ -296,7 +320,7 @@ def route(config, *, host, level=None, task_type=None, role=None, failures=0, fa
                 out['action']=action='blocked_no_available_model'
                 reasons.append('review_write_block_requires_claude_plan')
                 for k in ('alias','tool','agent','model','model_resolution','effort','tier'): out[k]=None
-                out['premium']=False
+                out['premium']=out['premium_requires_reason']=False
             else:
                 out['paseo_create_agent']=_paseo_start_config(config, tool, model_id, e, review)
                 profile=_paseo_profile(config, role, cur, task_type, a, e)
@@ -313,6 +337,9 @@ def main(argv=None):
     p.add_argument('--task-type'); p.add_argument('--level', type=int); p.add_argument('--role')
     p.add_argument('--failures', type=int, default=0); p.add_argument('--failure-kind')
     p.add_argument('--available'); p.add_argument('--resolved', action='store_true')
+    p.add_argument('--failed-family', help='Comma-separated families (claude, codex, both) that failed at LEVEL 4, most recent last')
+    p.add_argument('--failed-model', help='Comma-separated aliases or ids that already failed on this root problem')
+    p.add_argument('--implementer-family', help='claude or codex: reviewer must be the other family')
     p.add_argument('--model-catalog', help='Codex model cache JSON; defaults to CODEX_HOME/models_cache.json')
     p.add_argument('--resolve-family', help='Resolve a project-selected Codex family without changing its tier or effort')
     p.add_argument('--effort', choices=('low','medium','high','xhigh','max','ultra'))
@@ -334,7 +361,10 @@ def main(argv=None):
         if a.effort is not None: raise PolicyError('invalid_selector')
         r=route(config, host=a.host, level=a.level, task_type=a.task_type, role=a.role, failures=a.failures,
                 failure_kind=a.failure_kind, available=[x for x in a.available.split(',') if x] if a.available is not None else None,
-                resolved=a.resolved, model_catalog=model_catalog)
+                resolved=a.resolved, model_catalog=model_catalog,
+                failed_family=[x for x in a.failed_family.split(',') if x] if a.failed_family is not None else None,
+                failed_models=[x for x in a.failed_model.split(',') if x] if a.failed_model is not None else (),
+                implementer_family=a.implementer_family)
     except PolicyError as e:
         print(json.dumps({'schema':1,'error':str(e)}, sort_keys=True)); return 30
     print(json.dumps(r, sort_keys=True))
