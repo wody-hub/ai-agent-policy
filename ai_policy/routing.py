@@ -234,29 +234,28 @@ def route(config, *, host, level=None, task_type=None, role=None, failures=0, fa
     entry = task_choices[0] if task_choices else selected[host]
     alternatives = task_choices[1:] if task_choices else selected.get(alt_key) if alt_key else None
     palias, peffort=entry
-    cands, chosen, fallback_used=[], None, False
+    fallback_used=False
     if cur==top and top>4: reasons.append('last_resort')
-    if chosen is None:
-        cands=[(palias, peffort)]
-        if alternatives is not None:
-            cands.extend(tuple(x) for x in alternatives)
-        else:
-            cands.extend((a, peffort) for a in config['fallbacks'].get(palias, ()))
+    cands=[(palias, peffort)]
+    if alternatives is not None:
+        cands.extend(tuple(x) for x in alternatives)
+    else:
+        cands.extend((a, peffort) for a in config['fallbacks'].get(palias, ()))
+    def select(cs):
         seen=set()
-        for a, e in cands:
+        for a, e in cs:
             if a in seen or (config['models'][a]['tier']=='exceptional' and cur!=top): continue
             seen.add(a)
             model_id, model_resolution=_resolved_model(config['models'][a], model_catalog)
             if _usable(config, host, a, available, model_id, orchestrator):
                 if a==palias or alternatives is not None:
-                    chosen=(a, e, model_id, model_resolution)
-                else:
-                    # A fallback takes the effort that model is assigned at this level on another host, if any.
-                    same=[x[1] for x in (lv or {}).values() if isinstance(x, list) and x and x[0]==a]
-                    chosen=(a, same[0] if same and (same[0] is None or same[0] in config['models'][a]['efforts']) else _effort(config['models'][a], e), model_id, model_resolution)
-                break
+                    return (a, e, model_id, model_resolution)
+                # A fallback takes the effort that model is assigned at this level on another host, if any.
+                same=[x[1] for x in (lv or {}).values() if isinstance(x, list) and x and x[0]==a]
+                return (a, same[0] if same and (same[0] is None or same[0] in config['models'][a]['efforts']) else _effort(config['models'][a], e), model_id, model_resolution)
             if a==palias: reasons.append('model_unavailable:'+a)
-        if chosen and chosen[0]!=palias: fallback_used=True
+    chosen=select(cands)
+    if chosen and chosen[0]!=palias: fallback_used=True
     out={'schema':1,'host':host,'level':cur,'level_name':lv['name'] if lv else None,'task_type':task_type,'role':role,
          'alias':None,'tool':None,'agent':None,'model':None,'model_resolution':None,'effort':None,'tier':None,'action':action,'escalated':escalated,
          'fallback_used':fallback_used,'high_risk':high_risk,'human_gate':high_risk,'premium':False,'preserve_state':False,
