@@ -1,12 +1,12 @@
 # Orca → Paseo 정책 이전 설계 (paseo-policy-migration 1단계)
 
-작성 2026-11-25. 상태: 사용자 검토 대기 초안(2026-11-25 보정 반영, Q3 시험 결과 대기). 브랜치 `docs/paseo-policy-source`(base main @ 91a473a).
+작성 2026-11-25. 상태: 사용자 검토 대기 초안(2026-11-25 보정 반영, Q3 시험 결과 반영). 브랜치 `docs/paseo-policy-source`(base main @ 91a473a).
 
 ## 2026-11-25 보정 이력
 
 1단계 초안(4a920ce)에 같은 날 사용자 확정 결정과 새로 확인된 사실을 반영했다. 기존 `orca-*` 파일, `model-routing.json`, GH 프로젝트, 전역 설정은 수정하지 않았다.
 
-- **Q1~Q5 «결정됨»**(5절): Q1 병행기 후 퇴역(병행기 정의·종료 기준·확인 방법 명문화), Q2 guard Paseo 모드(순서 조건 3단계, 2단계 L4 검토 대상), Q4 정책 규칙 + Owner 자식 목록 점검(사실 보강), Q5 데몬 현 상태 명문화 + 시작 시 점검 항목. **Q3는 «시험 결과 수신 후 확정»**: Codex `plan_mode`를 1순위 후보로 두되 쓰기·셸 차단 시험 결과로 확정하며, 그때까지 지시 + 리뷰 전후 `git status`/diff 무변경 검사를 유지한다.
+- **Q1~Q5 «결정됨»**(5절): Q1 병행기 후 퇴역(병행기 정의·종료 기준·확인 방법 명문화), Q2 guard Paseo 모드(순서 조건 3단계, 2단계 L4 검토 대상), Q4 정책 규칙 + Owner 자식 목록 점검(사실 보강), Q5 데몬 현 상태 명문화 + 시작 시 점검 항목. **Q3는 시험 결과로 «확정»**: Codex 리뷰어에 `plan_mode`를 권장하되 지침 수준 보호일 뿐 «강제된다»고 주장하지 않으며, 리뷰 전후 `git status`/diff 무변경 검사를 필수 증거로 한다. 쓰기 차단이 필요한 중요 리뷰는 Claude `plan` 모드 리뷰어. 프로필 변경은 제안 P6(사용자 승인 후).
 - **F1 반영**: Paseo 데몬이 모든 에이전트에 주입하는 조율 규칙(`daemon.appendSystemPrompt`)을 «데몬이 이미 강제하는 기본 프로토콜»로 인용하고, 별도 보고 형식을 만들지 않으며 정책 고유 항목은 그 위에 얹는다(common §5, lifecycle §7).
 - **F2 반영**: Codex 기본 권한(auto) 에이전트는 Paseo worktree에서 `git add/commit`이 샌드박스에 막힌다. «Codex Worker는 commit하지 않는다» 규칙과 문서 담당 commit 규칙 정리를 추가했다(common §3, lifecycle §5·§7). 7절 미확인 3·4번과 연결.
 - **F3 반영**: `daemon.relay.enabled=true`, 비밀번호 계열 키 없음, CORS 기본값. 임의 변경 없이 «사용자 확인 필요»로 기록하고 relay 사용을 Human Gate(Q9)로 올렸다.
@@ -71,7 +71,7 @@
 | Orca agent hook·statusLine·theme(C11) | 없음 | 후속 | 3단계에서 사용자 승인 후 정리 |
 | Orca Task(내부) ↔ 업무 TASK_ID 매핑 | Paseo agentId·workspaceId ↔ 업무 TASK_ID | 변경 | Task 연결표 열 이름 변경 필요 |
 | 동시 Worker 3 / 프리미엄 1 | Root가 계수(Paseo 상한 없음 [SRC]) | 변경 | |
-| 읽기 전용 리뷰어(Read/Grep/Glob) | Claude `plan` 모드 / Codex는 `plan_mode` 1순위 후보(시험 후 확정), 그 전에는 지시 + 리뷰 전후 무변경 검사 | 변경 | Q3 «시험 결과 수신 후 확정» |
+| 읽기 전용 리뷰어(Read/Grep/Glob) | Claude `plan` 모드 / Codex는 `plan_mode` 권장(지침 수준, 강제 아님) + 리뷰 전후 무변경 검사 필수 | 변경 | Q3 확정(2026-11-25 시험), 프로필 변경은 P6 |
 | 구현 Worker의 보고 형식 | 데몬 주입 프로토콜(`PROJECT_DONE:`/`BLOCKED:`/`NEED_APPROVAL:` + 증거) + 정책 고유 항목 | 변경 | F1. Codex Worker는 Paseo 도구가 없어 최종 응답으로 보고 |
 | Worker의 commit(문서 담당 포함) | Claude Worker 또는 Owner. Codex Worker는 diff 보고만 | 변경 | F2 |
 | Hermes ↔ Orca Coordinator 역할 분담 | Hermes ↔ Paseo Root/Coordinator | 유지 | 명칭만 |
@@ -91,7 +91,7 @@
 | 7 | 목표/범위/완료 조건 재진술, 인계 필수 항목, 질문 ≤3, 충돌 먼저 보고 | 유지 | 배정 계약에 포함 | lifecycle §2.3 |
 | 8 | 실작업 전 Task 등록·브랜치 매핑, 동일 Task ID | 유지 | 연결표의 Orca Task/Run/Dispatch 열을 agentId·workspaceId로 교체(2단계) | §6 |
 | 9 | 실제 검증 근거로 완료 판단, 상태 구분, 실패를 성공으로 보고 금지 | 유지 | 알림≠완료 규칙으로 강화 | common §5, §8 |
-| 10 | 독립 리뷰, 리뷰 경로, 읽기 전용 리뷰어, 고위험 전문 검토 | 변경 | Claude 리뷰어 `plan` 모드. Codex 리뷰어는 `plan_mode` 시험 결과 수신 후 확정(Q3), 그 전에는 지시 + 무변경 검사 | routing §2 |
+| 10 | 독립 리뷰, 리뷰 경로, 읽기 전용 리뷰어, 고위험 전문 검토 | 변경 | Claude 리뷰어 `plan` 모드. Codex 리뷰어는 `plan_mode` 권장 + 무변경 검사 필수, 강제 주장 금지, 중요 리뷰는 Claude `plan`(Q3 확정) | routing §2 |
 | 11 | 새 업무=기준 브랜치 아래 새 관리 worktree, 기준 SHA, 위치 확인, 기본 체크아웃 금지, `--no-parent` 금지, 단일 쓰기, 격리≠DB/포트 격리 | 변경 | `create_workspace` branch-off. parent 개념·`--no-parent` 규칙 폐기(대상 없음), 목적은 유지 | common §3, lifecycle §4.1 |
 | 12 | worktree별 정책 설치 후 배정, 비추적 설치 산출물 | 유지 | `paseo.json` setup ≠ 준비 완료 추가 | lifecycle §4.2 |
 | 13 | 병합·태그·푸시·배포는 승인 범위 내, 설치 요청≠승인, release/hotfix 양쪽 반영 | 유지 | `archive_workspace`를 worktree 삭제로 명시 | common §7, lifecycle §5.8 |
@@ -129,7 +129,7 @@
 
 ## 5. 결정 사항과 열린 질문
 
-사용자 확정(2026-11-25): Q1·Q2·Q4·Q5는 «결정됨», Q3는 방향만 확정하고 «시험 결과 수신 후 확정»이다. 나머지(Q6~Q10)는 열린 질문이다.
+사용자 확정(2026-11-25): Q1·Q2·Q4·Q5는 «결정됨», Q3는 방향 확정 후 같은 날 시험 결과를 받아 «확정»했다. 나머지(Q6~Q10)는 열린 질문이다.
 
 **Q1. Orca 정책 퇴역 시점 — «결정됨»: 병행기 후 퇴역**
 - **병행기의 정의**: 결정 시점에 기존 Orca가 소유한 진행 중 Run·worktree만 Orca 규칙(`orca-common.md`, `orca-worker-lifecycle.md`)으로 마무리한다. 새 Task는 즉시 Paseo 규칙을 쓴다. 이미 Orca가 소유한 Run을 Paseo로 옮기거나 새 Run을 Orca에 추가하지 않는다.
@@ -145,12 +145,11 @@
 - **L4 검토**: guard는 집행 코드다. 2단계 구현 전에 Opus high(LEVEL 4) 설계 검토와 구현 후 독립 검토를 거친다.
 - 근거: 현재 7개 사본(gh-docs + 6개 저장소)의 Orca 모드는 Paseo 세션에서 통과 조건을 만들 수 없어 일반 작업이 막히거나 우회가 생긴다.
 
-**Q3. Codex 리뷰어(`review-claude-work`)의 읽기 전용 보장 — 방향 확정, «시험 결과 수신 후 확정»**
-- 방향: 계열 교차 리뷰를 유지하면서 읽기 전용을 실제로 보장하는 수단으로 바꾼다.
-- 새로 확인된 사실(2026-11-25, `inspect_provider`): Codex에는 `plan_mode` 토글(`features.plan_mode`, «planning-only collaboration mode»)이 있다. 이것이 리뷰어 프로필의 **1순위 후보**다.
-- 확정 조건: `plan_mode`에서 쓰기·셸이 **실제로 차단되는지** 시험 결과로 판정한다. 시험 결과는 사용자가 후속 메시지로 전달한다. 결과 수신 전에는 `plan_mode`가 읽기 전용을 보장한다고 쓰지 않는다.
-- 확정 전 대체 수단(유지): 리뷰 지시(읽기 전용 명시) + 리뷰 전후 worktree `git status`/diff 무변경 검사. 변경이 생기면 리뷰 결과를 무효로 하고 보고한다.
-- 시험 결과 수신 후 갱신 대상: 이 절, routing 문서 2절 `review-claude-work` 행·4절 P4, common §6, 7절 미확인 4번.
+**Q3. Codex 리뷰어(`review-claude-work`)의 읽기 전용 보장 — «확정»(2026-11-25 시험 결과 반영)**
+- 방향: 계열 교차 리뷰를 유지하되, 도구 수준 강제를 증명하지 못한 수단을 «강제»라고 쓰지 않는다.
+- 사실: Codex에는 `plan_mode` 토글(`features.plan_mode`, «planning-only collaboration mode»)이 있다(`inspect_provider`). Paseo는 Codex 읽기 전용 샌드박스 모드를 노출하지 않는다(modes: auto, auto-review, full-access). 샌드박스는 workspace-write다.
+- 시험·결과·한계: routing 문서 2.1절과 7.1의 C-8(지침 수준 준수 확인), 7.2의 U-4·U-15(도구 수준 강제 미확인).
+- **확정 규칙**: (1) `review-claude-work`에 `features.plan_mode=true`를 켜는 것을 권장한다. (2) «읽기 전용이 강제된다»고 주장하지 않는다. 읽기 전용 증거는 리뷰 전후 `git status`/diff 동일 확인(무변경 검사)이며 필수다. (3) 쓰기 차단이 반드시 필요한 중요 리뷰(보안·무결성 등)는 Claude `plan` 모드 리뷰어를 쓴다(계열 교차 포기, 모드 설명상 강제). Claude `plan`은 «도구 실행을 막는 모드로 설명됨», 이 세션에서 쓰기 시도로 검증하지 않았다. (4) 프로필 modeId가 `auto`이므로 plan_mode를 켜는 변경은 routing 문서 제안 P6로 두고 사용자 승인 후 프로필 설정에 반영한다. 이 단계에서 `~/.paseo/config.json`은 수정하지 않았다.
 
 **Q4. Claude Worker의 Paseo 도구(재위임 수단) 제한 — «결정됨»: 정책 규칙 + Owner의 자식 목록 점검으로 시작**
 - 관측(2026-11-25 `~/.paseo/config.json` 읽기, 값 출력 없음): `claude` 제공자는 터미널·워크스페이스 스크립트 도구만 `disabledTools`로 막고 `create_agent`·`send_agent_prompt`는 열려 있다. `codex` 제공자는 `paseoTools.enabled=false`라 Paseo 도구가 전부 없어 재위임이 불가능하다. 따라서 **재위임 위험은 Claude Worker에 한정**된다.
@@ -197,20 +196,21 @@
 | C-2 | `claude` 제공자는 터미널·워크스페이스 스크립트 도구만 `disabledTools`로 막고 `create_agent`·`send_agent_prompt`는 열려 있다. `codex` 제공자는 `paseoTools.enabled=false`로 Paseo 도구가 없다 | 2026-11-25, `~/.paseo/config.json` 읽기(값 출력 없음) | common §2, 5절 Q4 |
 | C-3 | 데몬은 `desktopManaged=false`인 독립 데몬, 에이전트 셸 로케일 `ko_KR.UTF-8`, 에이전트 셸에 `ANTHROPIC_BASE_URL` 없음 | 2026-11-25, 부모 프롬프트의 관측 | lifecycle §10, 5절 Q5 |
 | C-4 | `daemon.relay.enabled=true`, `daemon.*`에 비밀번호 계열 키 없음, `cors.allowedOrigins` 기본값 | 2026-11-25, 설정 파일 읽기(값 출력 없음) | common §6·§7, 5절 Q9 |
-| C-5 | Codex에 `plan_mode` 토글(`features.plan_mode`, «planning-only collaboration mode»)이 존재한다(차단 동작은 미확인, 7.2의 U-4) | 2026-11-25, `inspect_provider` | routing §2, 5절 Q3 |
+| C-5 | Codex에 `plan_mode` 토글(`features.plan_mode`, «planning-only collaboration mode»)이 존재한다(지침 수준 준수는 C-8, 도구 수준 강제는 미확인 U-4·U-15) | 2026-11-25, `inspect_provider` | routing §2, 5절 Q3 |
 | C-6 | Codex 기본 권한(auto) 에이전트는 Paseo worktree에서 `git add/commit`이 실패한다. Git 메타데이터(`.git/worktrees/...`)가 작업 폴더 밖 원본 저장소 `.git`에 있어 샌드박스가 `index.lock` 생성을 거부(Operation not permitted) | 2026-11-25, 이 세션 Codex Worker의 실패 관측 | common §3, lifecycle §5·§7 |
 | C-7 | 프로필 메모·목록(2026-11-25 `list_profiles`)의 provider/model/mode/thinking 값 | 2026-11-25, `list_profiles` | routing §2 |
+| C-8 | Codex(`gpt-6-luna`, `auto`, `features.plan_mode=true`) 시험 2회: 읽기(`ls`, `pwd`)만 실행하고 셸·편집 도구 파일 생성은 «모드 지침 때문에» 시도하지 않았다. 사용자가 임시 폴더 한정 쓰기를 명시 허용한 2차에도 «Plan 모드 지침이 파일 변경을 금지하므로 시도할 수 없다»며 거부했고 폴더에 파일 0개. 즉 **지침 수준 준수는 확인됨**. 응답이 «도구/샌드박스가 막은 것이 아니라 내가 안 한 것»이라고 명시했으므로 **도구 수준 강제는 증명되지 않음** | 2026-11-25, Paseo Codex 에이전트 시험 2회(폴더 파일 수 확인) | routing §2.1, 5절 Q3 |
 
 연결: C-6은 아래 미확인 U-3(hook·AGENTS.md 로딩)·U-4(Codex 읽기 전용)와 연결된다. 쓰기 거부가 실제로 집행된다는 점은 확인했지만 이것이 «쓰기·셸을 전부 막는 읽기 전용 모드가 있다»는 증거는 아니다(U-4). 또한 Codex 세션에서 정책 설치·hook 검증에 git 연산이 필요하면 같은 제약에 걸릴 수 있으므로 그 단계는 Claude Worker 또는 Owner가 맡는다(U-3).
 
 ### 7.2 미확인
 
-런타임 실행으로 검증하지 않았거나 조사 문서에 근거가 없는 항목이다. 번호는 기존 1~13번을 유지했고(확인된 일부는 «부분 확인»), 새 항목은 14번부터다.
+런타임 실행으로 검증하지 않았거나 조사 문서에 근거가 없는 항목이다. 번호는 기존 1~13번을 유지했고(확인된 일부는 «부분 확인»), 새 항목은 14번부터다(Q3 시험으로 15번에 한계를 기록하고 20번을 추가했다).
 
 1. 〔U-1〕 `get_agent_status` 스냅샷에 실제 실행 model·thinking이 나오는지(요청값 대비 확인 경로).
 2. 〔U-2〕 `create_workspace.baseBranch`가 원격 ref(`origin/dev`)를 받는지, 로컬과 원격이 다를 때의 동작.
 3. 〔U-3〕 Paseo 경유 Claude 세션에서 프로젝트 hook(guard)이 실제 실행되는지, Codex app-server 세션이 AGENTS.md를 읽는지. Q2 순서 조건 (2)의 확인 대상이다. C-6으로 Codex 샌드박스 제약이 확인되어, Codex 세션의 정책 설치·commit 가능 여부도 함께 본다.
-4. 〔U-4〕 Codex에 읽기 전용(쓰기·셸 차단) 모드가 있는지(`auto-review`의 의미 포함). **부분 확인**: `plan_mode` 토글 존재는 확인됨(C-5). 쓰기·셸이 실제 차단되는지는 시험 결과 수신 후 확정(Q3).
+4. 〔U-4〕 Codex에 읽기 전용(쓰기·셸 차단) 모드가 있는지(`auto-review`의 의미 포함). **부분 확인**: `plan_mode` 토글 존재(C-5)와 지침 수준 준수(C-8)는 확인됨. Paseo는 읽기 전용 샌드박스 모드를 노출하지 않으며(auto, auto-review, full-access) 쓰기·셸을 도구·샌드박스 수준에서 막는 모드는 **미확인**. 정책은 «강제 아님 + 무변경 검사»로 확정(Q3).
 5. 〔U-5〕 Owner가 `closed` 상태일 때 완료 알림이 전달·재개되는지(#8464 관련).
 6. 〔U-6〕 손자 에이전트 생성(중첩 오케스트레이션)의 실제 동작과 깊이 제한. Q4 점검 규칙이 대상으로 삼는다.
 7. 〔U-7〕 `labels` 키 규칙의 예약어 충돌 여부, `list_agents`의 라벨 조회 방법.
@@ -221,8 +221,9 @@
 12. 〔U-12〕 Claude Agent SDK 경유 구독 사용의 Anthropic 측 약관·과금 처리.
 13. 〔U-13〕 `paseo.json` setup 훅으로 정책 설치를 자동화할 수 있는지와 그 실패 시 동작. Q2 순서 조건 (1)의 확인 대상이다.
 14. 〔U-14〕 **사용자 확인 필요**: relay가 켜져 있는 의도와 비밀번호 필요 여부. 현재 상태는 켜짐·비밀번호 키 없음(C-4)이며 조사 문서 권고와 다르다. 임의 변경 금지, Q9로 사용자 결정.
-15. 〔U-15〕 `plan_mode`가 Paseo 경유 Codex 에이전트에서 쓰기·셸을 실제로 차단하는지(시험 결과 수신 대기, Q3). 수신 후 이 항목과 4번을 닫는다.
+15. 〔U-15〕 `plan_mode`가 도구·샌드박스 수준에서 쓰기·셸을 막는지: **미확인**. 2026-11-25 시험은 지침 수준 준수만 보였다(C-8). 이 시험으로 증명할 수 없으며, 증명 전까지 정책은 강제를 주장하지 않는다. 한계: 시험 2회, 모델 `gpt-6-luna` 한 종류, 에이전트의 거부가 지침 해석에 의존. 다른 모델·지침 변경 시 결과가 달라질 수 있다.
 16. 〔U-16〕 Worker 전용 custom provider 별칭으로 `create_agent`만 `disabledTools`에 넣을 수 있는지와 `claude` provider 설정을 공유하는 Root·Coordinator에 영향이 없는지(Q4 후속 방안).
 17. 〔U-17〕 Codex Worker commit을 막는 샌드박스 제약을 권한 모드 상향 없이 해소하는 지원 설정(예: 쓰기 가능 경로)이 있는지. 현재 규칙은 «commit하지 않는다»이며 우회 방안은 사용자 승인 사항이다(C-6).
 18. 〔U-18〕 `appendSystemPrompt` 주입이 Codex 에이전트에도 적용되는지와 그 내용·접두어가 데몬 버전·설정 변경 시 달라질 수 있는지. 정책은 접두어 문구를 인용하므로 시작 점검에서 주입 내용을 다시 확인한다(값 아닌 규칙 존재 여부).
 19. 〔U-19〕 Orca Run 열거·정산 상태를 한 번에 확인하는 방법. 병행기 종료 확인(Q1)은 Task 연결표·로컬 기록 + `run-show`로 하며, 전체 Run 목록을 자동으로 얻는 CLI 경로는 확인하지 않았다.
+20. 〔U-20〕 Claude `plan` 모드가 실제로 쓰기·셸을 막는지: Paseo 모드 설명(«Analyze the codebase without executing tools or edits»)으로 도구 실행을 막는 모드로 설명되나 이 세션에서 쓰기 시도로 검증하지 않았다. 중요 리뷰에 쓰기 전에 첫 사용 시 확인한다.
