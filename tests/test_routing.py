@@ -499,4 +499,48 @@ class PaseoSecurityReviewIndependenceTests(unittest.TestCase):
         code, x=run('--host','orca','--task-type','security_review','--implementer-family','claude','--available','sonnet',*nc)
         self.assertEqual((code, x['action']), (40, 'blocked_no_independent_reviewer'))
 
+class LateralScopeTests(unittest.TestCase):
+    """The lateral compares with the model the first attempt really used, keeps its tool, and never touches cross-family review types."""
+    def retry(self, host, t, **kw): return r(host=host, task_type=t, failures=1, failure_kind='verification', **kw)
+
+    def test_review_and_diagnose_routes_keep_their_first_attempt_tool(self):
+        for host in ('orca','paseo'):
+            for t in ('code_review_codex','review','important_review_codex','security_review','code_review_claude','diagnose_codex_failure','diagnose_claude_failure'):
+                with self.subTest(host=host, task=t):
+                    first, again=r(host=host, task_type=t), self.retry(host, t)
+                    self.assertEqual((again['tool'], again['action']), (first['tool'], 'retry'))
+                    if t!='diagnose_claude_failure': self.assertFalse(again['lateral'])   # Luna-first and Codex-tool: the Terra lateral keeps the tool
+        for host in ('orca','paseo'):
+            for t in ('code_review_codex','review','diagnose_codex_failure','important_review_codex'):
+                self.assertEqual((pick(self.retry(host, t)), self.retry(host, t)['tool']), (pick(r(host=host, task_type=t)), 'claude'))   # exactly the first route again
+        # no independence downgrade without or with implementer_family
+        x=self.retry('orca', 'code_review_codex', implementer_family='codex')
+        self.assertEqual((pick(x), x['degraded_independence']), (('sonnet','medium'), False))
+        x=self.retry('paseo', 'review', implementer_family='codex')
+        self.assertEqual((x['tool'], x['degraded_independence'], x['paseo_create_agent']['settings']['modeId']), ('claude', False, 'plan'))
+        x=self.retry('paseo', 'review')
+        self.assertEqual((x['tool'], x['paseo_create_agent']['settings']['modeId']), ('claude', 'plan'))
+        self.assertEqual(pick(self.retry('orca', 'diagnose_codex_failure')), ('sonnet','high'))
+
+    def test_luna_first_routes_and_plain_level_2_still_get_the_lateral(self):
+        for host in ('orca','paseo'):
+            for t in ('feature','api','frontend','bugfix','test_implementation'):
+                with self.subTest(host=host, task=t):
+                    x=self.retry(host, t); self.assertEqual((pick(x), x['lateral'], x['action']), (('terra','high'), True, 'retry'))
+        for host in ('orca','paseo','codex'):
+            x=r(host=host, level=2, failures=1, failure_kind='verification'); self.assertEqual((pick(x), x['lateral']), (('terra','high'), True))
+        self.assertEqual(pick(self.retry('codex', 'feature')), ('terra','high'))
+
+    def test_lateral_needs_the_same_tool_as_the_first_attempt(self):
+        # A Claude-first level 2 route (requirements: Sonnet high) is not turned into a Codex attempt.
+        x=self.retry('orca', 'requirements'); self.assertEqual((pick(x), x['lateral'], x['action']), (('sonnet','high'), False, 'retry'))
+        x=self.retry('paseo', 'requirements'); self.assertEqual((pick(x), x['lateral']), (('sonnet','high'), False))
+
+    def test_two_attempt_total_is_unchanged(self):
+        for host, expected in PATH_HOSTS.items():
+            attempts, last=walk(host); self.assertEqual((attempts, len(attempts)), (expected, 10))
+        # a skipped lateral still escalates after the second counted failure
+        x=r(host='orca', task_type='code_review_codex', failures=2, failure_kind='verification')
+        self.assertEqual((x['action'], x['level']), ('escalate', 3))
+
 if __name__=='__main__': unittest.main()

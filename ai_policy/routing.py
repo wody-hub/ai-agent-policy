@@ -300,6 +300,11 @@ def route(config, *, host, level=None, task_type=None, role=None, failures=0, fa
         nonlocal cur, action, escalated
         if cur and (cur>=target or cur==top): action='handoff_to_lead'; reasons.append('already_max_level')
         else: cur, action, escalated=target, 'escalate', True
+    alt_key, routes_key = _host_keys(config, host)
+    def task_route():
+        """The task route that applies at the current level (None when the level or role default is used)."""
+        if routes_key and cur is not None and cur == base and not high_risk and cur < 4 and (level is None or level == config['task_types'].get(task_type)):
+            return config.get(routes_key, {}).get(task_type, ()) or None
     if resolved:
         action=('return_to_default'); reasons.append('resolved')
     elif failure_kind in esc['non_model_failure_kinds']:
@@ -316,16 +321,17 @@ def route(config, *, host, level=None, task_type=None, role=None, failures=0, fa
             action='retry'; reasons.append('below_failure_threshold')
             # The last allowed attempt at a level with a lateral model goes to that standard-tier model; it has no fallbacks.
             # Roles and non-model failures never take the lateral step; the lateral model is a worker, never an orchestrator.
+            # It keeps the tool of the model the first attempt really used (task route entry, else the level value) and never applies to
+            # cross-family review types, so a review or diagnosis route is retried as routed.
             entry_lateral=config['levels'].get(str(cur), {}).get('lateral', {}).get(host) if role is None and cur and failures==esc['reasoning_failures_before_escalation']-1 else None
-            if entry_lateral and failure_kind in (None, *esc['counted_failure_kinds']) and entry_lateral[0]!=config['levels'][str(cur)][host][0]:
+            first=((task_route() or [None])[0] or config['levels'][str(cur)][host]) if entry_lateral else None
+            if entry_lateral and failure_kind in (None, *esc['counted_failure_kinds']) and task_type not in config.get('cross_family_review', {}).get('task_types', ()) \
+                    and entry_lateral[0]!=first[0] and config['models'][entry_lateral[0]]['tool']==config['models'][first[0]]['tool']:
                 model_id, _=_resolved_model(config['models'][entry_lateral[0]], model_catalog)
                 if _usable(config, host, entry_lateral[0], available, model_id, False): lateral=tuple(entry_lateral); reasons.append('lateral_step')
                 else: reasons.append('lateral_unavailable:'+entry_lateral[0]); up(cur+1)
     lv=config['levels'][str(cur)] if cur else None
-    task_choices = ()
-    alt_key, routes_key = _host_keys(config, host)
-    if routes_key and cur is not None and cur == base and not high_risk and cur < 4 and lateral is None and (level is None or level == config['task_types'].get(task_type)):
-        task_choices = config.get(routes_key, {}).get(task_type, ())
+    task_choices = (task_route() or ()) if lateral is None else ()
     selected = lv if lv else config['roles'][role]
     orchestrator = lv is None and selected.get('orchestrator') is True
     entry = task_choices[0] if task_choices else selected[host]
