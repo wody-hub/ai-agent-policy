@@ -1,42 +1,48 @@
 {
   "schema": 1,
-  "version": "1.5.0",
-  "verified_on": "2026-11-12",
+  "version": "1.6.0",
+  "verified_on": "2026-11-25",
   "notes": "Codex Luna/Terra/Sol/Astra resolve to the highest visible, API-supported generation in the installed models_cache.json matching codex_family when fetched within 30 days; the family resolver also supports Terra for project-specific routes. id is the last-known fallback when the cache is missing, stale, or has no match. The resolver reads but never refreshes that cache. Claude and Fable IDs remain version-pinned. Prices are intentionally null until an approved source is recorded; null means the cost estimate is reported as not collected.",
   "models": {
     "luna":   {"tool": "codex",  "agent": "codex",  "id": "gpt-6-luna",                "codex_family": "luna", "tier": "economy", "efforts": ["low", "medium", "high", "xhigh", "max"], "enabled": true},
     "terra":  {"tool": "codex", "agent": "codex", "id": "gpt-6.1-terra", "codex_family": "terra", "tier": "standard", "efforts": ["low", "medium", "high", "xhigh", "max"], "enabled": true},
     "sonnet": {"tool": "claude", "agent": "claude", "id": "claude-sonnet-5-5",         "tier": "standard", "efforts": ["low", "medium", "high", "xhigh", "max"], "enabled": true},
-    "haiku":  {"tool": "claude", "agent": "claude", "id": "claude-haiku-4-5-20251001", "tier": "economy", "efforts": [], "enabled": true, "lookup_only": true},
+    "haiku":  {"tool": "claude", "agent": "claude", "id": "claude-haiku-5-5",           "tier": "economy", "efforts": ["low", "medium", "high", "xhigh", "max"], "enabled": true, "lookup_only": true},
     "opus":   {"tool": "claude", "agent": "claude", "id": "claude-opus-5-5",           "tier": "premium", "efforts": ["low", "medium", "high", "xhigh", "max"], "enabled": true},
-    "sol":    {"tool": "codex",  "agent": "codex",  "id": "gpt-6.1-sol",               "codex_family": "sol", "tier": "premium", "efforts": ["low", "medium", "high", "xhigh", "max", "ultra"], "enabled": true},
-    "astra":  {"tool": "codex",  "agent": "codex",  "id": "gpt-6-astra",               "codex_family": "astra", "tier": "exceptional", "efforts": ["low", "medium", "high", "xhigh", "max", "ultra"], "enabled": true},
-    "fable":  {"tool": "claude", "agent": "claude", "id": "claude-fable-5-1",          "tier": "exceptional", "efforts": ["low", "medium", "high", "xhigh", "max"], "enabled": true, "access_verified_on": "2026-11-06"}
+    "sol":    {"tool": "codex",  "agent": "codex",  "id": "gpt-6.2-sol",               "codex_family": "sol", "tier": "premium", "efforts": ["low", "medium", "high", "xhigh", "max", "ultra"], "enabled": true},
+    "astra":  {"tool": "codex",  "agent": "codex",  "id": "gpt-6.2-astra",               "codex_family": "astra", "tier": "exceptional", "efforts": ["low", "medium", "high", "xhigh", "max", "ultra"], "enabled": true},
+    "fable":  {"tool": "claude", "agent": "claude", "id": "claude-fable-5-1",          "tier": "exceptional", "efforts": ["low", "medium", "high", "xhigh", "max"], "enabled": true, "access_verified_on": "2026-11-06",
+              "alias_observed": {"id": "claude-fable-5-2", "observed_on": "2026-11-25", "adopted": false}}
   },
   "codex_model_families": {
     "luna": "gpt-6-luna",
-    "sol": "gpt-6.1-sol",
-    "astra": "gpt-6-astra",
+    "sol": "gpt-6.2-sol",
+    "astra": "gpt-6.2-astra",
     "terra": "gpt-6.1-terra"
   },
   "hosts": {
     "orca":   {"tools": ["claude", "codex"], "description": "Confirmed Orca task: Controller may assign either tool per worker."},
     "claude": {"tools": ["claude"], "description": "Claude Code session outside Orca."},
-    "codex":  {"tools": ["codex"], "description": "Codex session outside Orca."}
+    "codex":  {"tools": ["codex"], "description": "Codex session outside Orca."},
+    "paseo":  {"tools": ["claude", "codex"], "description": "Paseo-managed agent profiles (daemon.agentProfiles); Claude ids are pinned exact ids, upgraded only by an explicit sync."}
   },
   "roles": {
-    "root_orchestrator":   {"level": 2, "orca": ["terra", "high"], "orca_alternatives": [["sonnet", "high"]], "claude": ["sonnet", "medium"], "codex": ["luna", "high"]},
-    "project_coordinator": {"level": 2, "orca": ["luna", "high"], "orca_alternatives": [["terra", "high"]], "claude": ["sonnet", "medium"], "codex": ["luna", "high"]},
-    "lookup":              {"level": 1, "orca": ["luna", "medium"],   "claude": ["haiku", null],      "codex": ["luna", "medium"]}
+    "root_orchestrator":   {"level": 2, "orca": ["terra", "high"], "orca_alternatives": [["sonnet", "high"]], "claude": ["sonnet", "medium"], "codex": ["luna", "high"], "paseo": ["sonnet", "high"]},
+    "project_coordinator": {"level": 2, "orca": ["luna", "high"], "orca_alternatives": [["terra", "high"]], "claude": ["sonnet", "medium"], "codex": ["luna", "high"], "paseo": ["sonnet", "high"]},
+    "lookup":              {"level": 1, "orca": ["luna", "medium"],   "claude": ["haiku", null],      "codex": ["luna", "medium"], "paseo": ["luna", "medium"]}
   },
   "levels": {
-    "1": {"name": "simple",   "orca": ["luna", "medium"],  "claude": ["sonnet", "low"],    "codex": ["luna", "medium"]},
-    "2": {"name": "general",  "orca": ["luna", "high"], "orca_alternatives": [["sonnet", "high"]], "claude": ["sonnet", "medium"], "codex": ["luna", "high"]},
-    "3": {"name": "complex",  "orca": ["sonnet", "high"], "orca_alternatives": [["terra", "high"]],   "claude": ["sonnet", "high"],   "codex": ["luna", "xhigh"]},
+    "1": {"name": "simple",   "orca": ["luna", "medium"],  "claude": ["sonnet", "low"],    "codex": ["luna", "medium"], "paseo": ["luna", "medium"]},
+    "2": {"name": "general",  "orca": ["luna", "high"], "orca_alternatives": [["sonnet", "high"]], "claude": ["sonnet", "medium"], "codex": ["luna", "high"],
+          "paseo": ["luna", "high"], "paseo_alternatives": [["sonnet", "high"]],
+          "lateral": {"orca": ["terra", "high"], "codex": ["terra", "high"], "paseo": ["terra", "high"]},
+          "lateral_note": "After one counted failure at LEVEL 2 the standard-tier lateral model gets the second and last LEVEL 2 attempt; fallbacks are off for this step. Never a premium model."},
+    "3": {"name": "complex",  "orca": ["sonnet", "high"], "orca_alternatives": [["terra", "high"]],   "claude": ["sonnet", "high"],   "codex": ["luna", "xhigh"],
+          "paseo": ["sonnet", "high"], "paseo_alternatives": [["terra", "high"]]},
     "4": {"name": "critical", "orca": ["opus", "high"],     "claude": ["opus", "high"],     "codex": ["sol", "high"],
-          "orca_alternatives": [["sol", "high"]]},
+          "orca_alternatives": [["sol", "high"]], "paseo": ["opus", "high"], "paseo_alternatives": [["sol", "high"]]},
     "5": {"name": "last_resort", "orca": ["fable", "high"],  "claude": ["fable", "high"],   "codex": ["astra", "high"],
-          "orca_alternatives": [["astra", "high"]],
+          "orca_alternatives": [["astra", "high"]], "paseo": ["fable", "high"], "paseo_alternatives": [["astra", "high"]],
           "note": "Reached only by escalation after LEVEL 4 fails twice on the same root problem. Never a starting level."}
   },
   "task_types": {
@@ -89,6 +95,26 @@
     "release_validation": [["luna", "high"], ["terra", "high"]],
     "docs": [["luna", "medium"], ["sonnet", "medium"]],
     "log_summary": [["luna", "low"]]
+  },
+  "cross_family_review": {
+    "task_types": ["review", "code_review_codex", "code_review_claude", "important_review", "important_review_codex", "security_review"],
+    "blocking_types": ["security_review"],
+    "note": "With an implementer_family the reviewer must be the other family. If it is unavailable ordinary reviews proceed with degraded_independence=true; blocking_types and high-risk reviews are blocked."
+  },
+  "paseo_roles": {
+    "root-orchestrator":   {"model": "sonnet", "effort": "high",   "mode_id": "auto", "provider": "claude", "pinned_id": "claude-sonnet-5-5", "description": "Approved 2026-11-25: orchestrators run on Claude (Codex has no Paseo tools). Coordinates only, never edits code. Policy default was Terra high."},
+    "project-coordinator": {"model": "sonnet", "effort": "high",   "mode_id": "auto", "provider": "claude", "pinned_id": "claude-sonnet-5-5", "description": "Approved 2026-11-25: Claude Sonnet high (policy alternate). Do not lower effort. Creates Codex/Claude workers from these profiles; workers have no Paseo tools if Codex."},
+    "dev-l1-simple":       {"model": "luna",   "effort": "medium", "mode_id": "auto", "provider": "codex",  "pinned_id": "gpt-6-luna", "description": "LEVEL 1: rename, simple edit, docs, tests, boilerplate, pattern repeat, task coordination."},
+    "dev-l2-general":      {"model": "luna",   "effort": "high",   "mode_id": "auto", "provider": "codex",  "pinned_id": "gpt-6-luna", "description": "LEVEL 2: feature, api, frontend, bugfix, extension. Alternate: claude-sonnet-5-5 high."},
+    "dev-l3-complex":      {"model": "sonnet", "effort": "high",   "mode_id": "auto", "provider": "claude", "pinned_id": "claude-sonnet-5-5", "description": "LEVEL 3: multi-module, state, performance, async, integration, refactor implementation, complex frontend. Alternate: gpt-6.1-terra high."},
+    "l4-critical":         {"model": "opus",   "effort": "high",   "mode_id": "auto", "provider": "claude", "pinned_id": "claude-opus-5-5", "description": "LEVEL 4: architecture major, concurrency, codebase-wide, security, data integrity, or escalation after 2 failures. Premium: max 1 concurrent, reason required. Alternate: gpt-6.2-sol high."},
+    "l5-last-resort":      {"model": "fable",  "effort": "high",   "mode_id": "auto", "provider": "claude", "pinned_id": "claude-fable-5-1", "description": "ONLY after LEVEL 4 failed twice on the same root problem. Never a starting level. Alternate: gpt-6.2-astra high."},
+    "review-codex-work":   {"model": "sonnet", "effort": "medium", "mode_id": "plan", "provider": "claude", "pinned_id": "claude-sonnet-5-5", "description": "Independent read-only review of Codex-implemented work. Important reviews: thinking high."},
+    "review-claude-work":  {"model": "terra",  "effort": "high",   "mode_id": "auto", "provider": "codex",  "pinned_id": "gpt-6.1-terra", "description": "Independent review of Claude-implemented work. Instruct read-only. Alternate: gpt-6-luna high. Codex has no Paseo tools in Paseo; it reports by its final message."},
+    "lookup":              {"model": "luna",   "effort": "medium", "mode_id": "auto", "provider": "codex",  "pinned_id": "gpt-6-luna", "description": "Bounded lookup, extraction, log summary (log_summary: thinking low). No design or security."},
+    "scout":               {"model": "haiku",  "effort": null,     "mode_id": "plan", "provider": "claude", "pinned_id": "claude-haiku-5-5", "provisional": true, "description": "Provisional, no profile yet: read-only file/symbol scouting on Haiku (plan mode). Effort not set."},
+    "ui-verify":           {"model": "terra",  "effort": "high",   "mode_id": "auto", "provider": "codex",  "pinned_id": "gpt-6.1-terra", "provisional": true, "description": "Provisional, no profile yet, unmeasured: UI verification on Terra high."},
+    "l5-alt-astra":        {"model": "astra",  "effort": "high",   "mode_id": "auto", "provider": "codex",  "pinned_id": "gpt-6.2-astra", "provisional": true, "description": "Provisional, no profile yet: LEVEL 5 alternate (Astra) used when the failed LEVEL 4 family was Claude. Same last-resort rules as l5-last-resort."}
   },
   "high_risk_types": ["security", "auth", "crypto", "production_infra", "destructive_db", "data_loss_migration", "data_integrity"],
   "escalation": {

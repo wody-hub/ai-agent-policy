@@ -225,7 +225,7 @@ Astra는 Sol까지 실패한 경우에만 쓰는 마지막 단계이며 일상 �
 | 단순 작업 (LEVEL 1) | `claude-sonnet-5-5` | `low` |
 | 일반 기능 구현·관련 검증 (LEVEL 2) | `claude-sonnet-5-5` | `medium` |
 | 복잡한 개발·재현 버그·정밀 검증 (LEVEL 3) | `claude-sonnet-5-5` | `high` |
-| 파일 탐색·정형 추출·짧은 요약 | `claude-haiku-4-5-20251001` | effort 지정 안 함 |
+| 파일 탐색·정형 추출·짧은 요약 | `claude-haiku-5-5` | effort 지정 안 함 |
 | 승격·고위험 진단 (LEVEL 4) | `claude-opus-5-5` | `high`, 필요 시 `xhigh` |
 | 최종 단계 (LEVEL 5, Opus 2회 실패 후) | `claude-fable-5-1` | `high` (2026-11-06 접근 확인) |
 | 선택적 독립 검토 | 사용 가능한 Codex 모델 | 실제 지원 수준 |

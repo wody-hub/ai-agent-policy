@@ -91,9 +91,9 @@ class ReportTests(Base):
         self.assertEqual(x['outcomes_by_type']['docs']['luna']['avg_retries'], 'not_collected')
 
     def test_premium_never_recommended(self):
-        o=self.outs('gpt-6-astra', 5, 5, input_tokens=1)+self.outs('opus', 5, 5, input_tokens=1)+self.outs('luna', 5, 5, input_tokens=100)
+        o=self.outs('gpt-6.2-astra', 5, 5, input_tokens=1)+self.outs('opus', 5, 5, input_tokens=1)+self.outs('luna', 5, 5, input_tokens=100)
         self.assertEqual(usage.report(self.C, outcomes=o)['recommendations']['docs']['model'], 'luna')
-        self.assertEqual(usage.report(self.C, outcomes=self.outs('gpt-6-astra', 5, 5, input_tokens=1))['recommendations']['docs'], 'insufficient_data')
+        self.assertEqual(usage.report(self.C, outcomes=self.outs('gpt-6.2-astra', 5, 5, input_tokens=1))['recommendations']['docs'], 'insufficient_data')
 
     def test_insufficient(self):
         x=usage.report(self.C, outcomes=self.outs('luna', 4, 4, input_tokens=1))
