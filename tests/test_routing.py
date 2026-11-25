@@ -348,6 +348,23 @@ class FailedFamilyTests(unittest.TestCase):
         x=r(host='paseo', level=4, failed_models='opus'); self.assertEqual(x['alias'], 'sol'); self.assertIn('excluded_failed_model:opus', x['reasons'])
         self.assertEqual(r(host='paseo', level=4, failed_models=['opus','sol'])['action'], 'blocked_no_available_model')
 
+class FailedModelResolvedIdTests(unittest.TestCase):
+    SOL63=[{'slug':'gpt-6.3-sol','visibility':'list','supported_in_api':True}]
+
+    def test_failed_model_matches_alias_pinned_id_and_catalog_resolved_id(self):
+        for host in ('orca','paseo','codex'):
+            base=r(host=host, level=4, available=['gpt-6.3-sol'], model_catalog=self.SOL63) if host!='orca' else r(host=host, level=4, available=['sol'], model_catalog=self.SOL63)
+            self.assertEqual((base['alias'], base['model']), ('sol','gpt-6.3-sol'), host)
+            for failed in ('sol', 'gpt-6.2-sol', 'gpt-6.3-sol'):
+                with self.subTest(host=host, failed=failed):
+                    x=r(host=host, level=4, available=['sol','gpt-6.3-sol'], model_catalog=self.SOL63, failed_models=[failed])
+                    self.assertNotEqual(x['alias'], 'sol'); self.assertIn('excluded_failed_model:sol', x['reasons'])
+        x=r(host='codex', level=4, model_catalog=self.SOL63, failed_models=['gpt-6.3-sol'])
+        self.assertEqual(x['action'], 'blocked_no_available_model')
+        # an unrelated id does not exclude it; only LEVEL 4 is restricted
+        self.assertEqual(r(host='codex', level=4, model_catalog=self.SOL63, failed_models=['gpt-6.4-sol'])['model'], 'gpt-6.3-sol')
+        self.assertEqual(r(host='codex', level=3, model_catalog=self.SOL63, failed_models=['gpt-6.3-sol'])['alias'], 'luna')
+
 class PremiumFlagTests(unittest.TestCase):
     def test_premium_choices_require_reason(self):
         for kw in ({'host':'orca','level':4},{'host':'paseo','level':4},{'host':'codex','level':4},{'host':'paseo','level':4,'failures':2,'failure_kind':'verification'},

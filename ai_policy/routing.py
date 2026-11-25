@@ -357,9 +357,10 @@ def route(config, *, host, level=None, task_type=None, role=None, failures=0, fa
         for a, e in cs:
             if a in seen or (config['models'][a]['tier']=='exceptional' and cur!=top): continue
             seen.add(a)
-            if cur==4 and (a in failed_models or config['models'][a]['id'] in failed_models):
-                reasons.append('excluded_failed_model:'+a); continue
             model_id, model_resolution=_resolved_model(config['models'][a], model_catalog)
+            # A failed model may be named by alias, pinned id or the catalog-resolved id the router printed.
+            if cur==4 and failed_models&{a, config['models'][a]['id'], model_id}:
+                reasons.append('excluded_failed_model:'+a); continue
             if _usable(config, host, a, available, model_id, orchestrator):
                 if a==palias or alternatives is not None:
                     return (a, e, model_id, model_resolution)
