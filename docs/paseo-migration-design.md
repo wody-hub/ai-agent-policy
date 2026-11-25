@@ -127,7 +127,7 @@
 | 18 | 권한 확대 금지, 유료 크레딧 자동 승인 금지 | 유지 | `bypassPermissions`/`full-access` 기본 금지, 권한 요청 승인 범위 규정 추가 | common §6 |
 | 19 | 비밀 취급 | 유지 | 데몬 환경 변수 전파 주의 추가(값 미기록) | common §6, lifecycle §10 |
 | 20 | 장시간 프로세스·로그 규칙 | 유지 | 배정 계약·보고 형식에 포함 | lifecycle §2.3, §7 |
-| 21 | Kanban 규칙 | 유지 | 변경 없음. 한글 locale(#3513) 위험 점검 추가 | lifecycle §10 |
+| 21 | Kanban 규칙 | 유지 + 연계 절 추가 | 규칙 자체는 변경 없음(전역 지침·칸반 README가 정본). 한글 locale(#3513) 위험 점검 추가. Task ↔ 카드 연결·쓰기 주체(Root 단독)·컬럼 매핑을 lifecycle §11에 추가 | lifecycle §10, §11 |
 | 22 | 기본 스킬 경로 표 | 변경 | "구현 조율" 행의 "Orca 작업이면 orca-orchestrator"를 Paseo 작업용 경로로 교체 필요(3단계, 대상 스킬 결정은 Q6) | §6 |
 
 합계: **유지 13, 변경 9, 폐기 0**(2B에서 #3을 유지→변경으로 정정: Hermes 역할 분담 폐기). 하위 요소 중 폐기: `run-create`, `consumer_fenced`, `run-use`/`run-current`, `--takeover-legacy`, Orca parent workspace, `--no-parent` 금지 규칙(모두 Paseo에 대상이 없음).
@@ -210,6 +210,7 @@
 > 2B(2026-11-25)에서 아래 «이 저장소» 항목 대부분을 반영했다(위 «2B 반영 이력»). 남은 것: 병행기 종료 후 `orca-*` «보관» 확정, 전역·연관 항목.
 
 - 이 저장소: `README.md`(Orca 전략 절), `orca-project-setup.md` → `paseo-project-setup.md` 신규, `project-task-policy-setup.md` POLICY F(Orca 결합 문구), `claude-code-global-model-routing-prompt.md`, `codex-global-model-routing-prompt.md`, `policy/model-routing.json`(제안 P1~P5), `policy/bundle.json`·`policy/adapters/*`, `ai_policy/bundle.py`(`REQUIRED`), `ai_policy/install.py`(설치 경로·마커가 orca 전용), `ai_policy/context.py`(ORCA_* 감지), `ai_policy/routing.py`(`--host paseo`), `tests/*`, `docs/reproducible-orca-environment.md`, 기존 `docs/orca-*.md`·`policy/orca-common.md`(병행기 종료 기준(Q1) 충족 후 «보관» 표시).
+- 전역 칸반 절 보존 확인: Claude 전역 지침(`~/.claude/CLAUDE.md`)의 «태스크 관리» 전체 절과 Codex 전역 지침 요약판이 같은 규칙을 가리키는지, 전역 문서 수정 중 칸반 절이 빠지지 않았는지 확인한다(칸반 원본 규칙은 전역 지침이 정본이며 lifecycle §11은 참조만 한다).
 - 전역: `~/.claude/CLAUDE.md`("Confirmed Orca tasks" 절, 기본 경로 표 구현 조율 행, Runtime notes), `~/.codex/AGENTS.md`(Orca 단락), `~/.claude/settings.json`·`~/.codex/hooks.json`의 Orca hook·statusLine·theme(C11).
 - 연관(정책 외, 영향만 기록): task-radar의 Orca 요청 outbox·relay-keeper, (Hermes는 미사용 결정이므로 Hermes work-manager `policy.json`·orca-status 플러그인은 정리 후보로만 기록), `com.orcahq.gateway` launchd(C13), 볼트 `02_Projects/Orca/README.md`(C6), `~/.claude/skills`의 orca-* 스킬.
 
@@ -232,7 +233,7 @@
 
 ### 7.2 미확인
 
-런타임 실행으로 검증하지 않았거나 조사 문서에 근거가 없는 항목이다. 번호는 기존 1~13번을 유지했고(확인된 일부는 «부분 확인»), 새 항목은 14번부터다(Q3 시험으로 15번에 한계를 기록하고 20번을 추가했다).
+런타임 실행으로 검증하지 않았거나 조사 문서에 근거가 없는 항목이다. 번호는 기존 1~13번을 유지했고(확인된 일부는 «부분 확인»), 새 항목은 14번부터다(Q3 시험으로 15번에 한계를 기록하고 20번을 추가했다. Kanban 연계로 21번을 추가했다).
 
 1. 〔U-1〕 `get_agent_status` 스냅샷에 실제 실행 model·thinking이 나오는지(요청값 대비 확인 경로).
 2. 〔U-2〕 `create_workspace.baseBranch`가 원격 ref(`origin/dev`)를 받는지, 로컬과 원격이 다를 때의 동작.
@@ -254,3 +255,4 @@
 18. 〔U-18〕 `appendSystemPrompt` 주입이 Codex 에이전트에도 적용되는지와 그 내용·접두어가 데몬 버전·설정 변경 시 달라질 수 있는지. 정책은 접두어 문구를 인용하므로 시작 점검에서 주입 내용을 다시 확인한다(값 아닌 규칙 존재 여부).
 19. 〔U-19〕 Orca Run 열거·정산 상태를 한 번에 확인하는 방법. 병행기 종료 확인(Q1)은 Task 연결표·로컬 기록 + `run-show`로 하며, 전체 Run 목록을 자동으로 얻는 CLI 경로는 확인하지 않았다.
 20. 〔U-20〕 Claude `plan` 모드가 실제로 쓰기·셸을 막는지: Paseo 모드 설명(«Analyze the codebase without executing tools or edits»)으로 도구 실행을 막는 모드로 설명되나 이 세션에서 쓰기 시도로 검증하지 않았다. 중요 리뷰에 쓰기 전에 첫 사용 시 확인한다.
+21. 〔U-21〕 Codex Worker가 worktree 밖 볼트(칸반 보드)에 쓸 수 있는지, Claude `auto` 모드가 볼트 쓰기를 어떻게 처리하는지: **미확인**. 그래서 칸반 카드 쓰기는 Root 단독이며 Worker·Reviewer·Coordinator는 결과 보고의 «칸반 반영 제안»만 낸다(lifecycle §11).
