@@ -60,7 +60,7 @@ class Env:
         return self.run(*extra, plan=out['plan_sha256'])
     def seed(self, profiles):
         self.state.mkdir(mode=0o700, exist_ok=True)
-        (self.state/'state.json').write_text(json.dumps({'schema':1,'profiles':profiles}))
+        (self.state/'state.json').write_text(json.dumps({'schema':1,'config_path':str(os.path.abspath(self.cfg)),'profiles':profiles}))
         os.chmod(self.state/'state.json', 0o600)
     def snap(self): return (self.cfg.read_bytes(), self.cfg.stat().st_mtime_ns, sorted(x.name for x in self.d.iterdir()))
     def loaded(self): return json.loads(self.cfg.read_text())
@@ -91,8 +91,44 @@ class SyncPlanTests(unittest.TestCase):
         code, out=e.dry(); self.assertEqual((code, out['changes']), (0, 0))
         code, out=e.run(plan=out['plan_sha256'])
         self.assertEqual((code, out['changes'], out['applied']), (0, 0, False))
-        self.assertEqual(e.snap(), before); self.assertFalse(e.state.exists())
+        self.assertEqual(e.snap()[:2], before[:2]); self.assertEqual(sorted(x.name for x in e.d.iterdir() if x.name.endswith('.tmp')), [])   # config bytes and mtime untouched
         self.assertFalse(out['daemon_reload_required'])
+        # ...but the adopted baseline is recorded, for no-op profiles only (not skipped provisional ones)
+        st=json.loads((e.state/'state.json').read_text())
+        self.assertEqual(set(st['profiles']), {p['id'] for p in fixture()['daemon']['agentProfiles']})
+        self.assertEqual(st['config_path'], str(os.path.abspath(e.cfg))); self.assertEqual(st['config_sha256'], sha(e.cfg.read_bytes()))
+        self.assertEqual(st['profiles']['l4-critical'], {'provider':'claude','model':'claude-opus-5-5','modeId':'auto','thinkingOptionId':'high'})
+        self.assertEqual(stat.S_IMODE((e.state/'state.json').stat().st_mode), 0o600); self.assertEqual(stat.S_IMODE(e.state.stat().st_mode), 0o700)
+        self.assertEqual(sorted(x.name for x in e.state.iterdir()), ['state.json'])     # no backup: nothing was written
+
+    def test_baseline_makes_the_first_policy_change_a_clean_update_not_a_conflict(self):
+        e=Env(self, catalog=FRESH_CATALOG()); self.assertEqual(e.apply()[1]['changes'], 0)
+        policy=json.loads(json.dumps(BASE)); policy['levels']['1']['paseo']=['luna','high']      # a later policy change: dev-l1-simple thinking medium -> high
+        pol=e.d/'policy.json'; pol.write_text(json.dumps(policy))
+        code, out=e.dry('--policy', str(pol))
+        self.assertEqual((code, out['conflicts'], out['profiles']['dev-l1-simple']['action']), (0, [], 'update'))
+        code, out=e.apply('--policy', str(pol)); self.assertEqual((code, out['changes'], out['applied']), (0, 1, True))
+        self.assertEqual(profile(e.loaded(), 'dev-l1-simple')['thinkingOptionId'], 'high')
+        # without the baseline the same change is a conflict
+        e2=Env(self, catalog=FRESH_CATALOG()); p2=e2.d/'policy.json'; p2.write_text(json.dumps(policy))
+        self.assertEqual(e2.dry('--policy', str(p2))[1]['profiles']['dev-l1-simple']['action'], 'conflict')
+
+    def test_conflicting_and_refused_rows_are_not_recorded(self):
+        e=Env(self, live_like(lambda ps: (edited('l4-critical', modeId='plan')(ps), edited('dev-l1-simple', model='gpt-7-luna')(ps))), catalog=FRESH_CATALOG())
+        code, out=e.apply('--overwrite','dev-l1-simple'); self.assertEqual(code, 1)
+        rec=json.loads((e.state/'state.json').read_text())['profiles']
+        self.assertNotIn('l4-critical', rec); self.assertNotIn('dev-l1-simple', rec); self.assertIn('root-orchestrator', rec)
+
+    def test_state_for_another_config_path_is_refused(self):
+        e=Env(self, live_like(edited('l4-critical', modeId='plan')), catalog=FRESH_CATALOG()); e.seed({'l4-critical':{'modeId':'plan'}})
+        st=json.loads((e.state/'state.json').read_text()); st['config_path']='/somewhere/else/config.json'; (e.state/'state.json').write_text(json.dumps(st))
+        before=e.snap(); state_before=(e.state/'state.json').read_bytes()
+        for plan in (None, '0'*64):
+            code, out=e.run(plan=plan)
+            self.assertEqual((code, out['error']), (2, 'state_config_mismatch'))
+        self.assertEqual(e.snap(), before); self.assertEqual((e.state/'state.json').read_bytes(), state_before); self.assertEqual(e.backups(), [])
+        legacy=json.dumps({'schema':1,'profiles':{}}); (e.state/'state.json').write_text(legacy)    # a state without a config path cannot be trusted either
+        self.assertEqual(e.run()[1]['error'], 'state_config_mismatch')
 
     def test_wrong_or_malformed_plan_hash_is_refused(self):
         e=Env(self, live_like(edited('l4-critical', modeId='plan'))); e.seed({'l4-critical':{'modeId':'plan'}}); before=e.snap()
@@ -155,7 +191,8 @@ class SyncApplyTests(unittest.TestCase):
         st=json.loads((e.state/'state.json').read_text())
         self.assertEqual(stat.S_IMODE((e.state/'state.json').stat().st_mode), 0o600)
         self.assertEqual(st['profiles']['l4-critical'], {'provider':'claude','model':'claude-opus-5-5','modeId':'auto','thinkingOptionId':'high'})
-        self.assertEqual(st['profiles']['lookup']['model'], 'gpt-6-luna'); self.assertNotIn('root-orchestrator', st['profiles'])
+        self.assertEqual(st['profiles']['lookup']['model'], 'gpt-6-luna')
+        self.assertEqual(st['profiles']['root-orchestrator']['model'], 'claude-sonnet-5-5')   # no-op rows are recorded as the adopted baseline
         self.assertNotIn(b[0].read_text(), json.dumps(out))   # backup content is never printed
         # second run is a no-op and leaves the file alone
         snap=e.snap(); code, out=e.apply(); self.assertEqual((code, out['changes']), (0, 0)); self.assertEqual(e.snap(), snap)
@@ -210,7 +247,8 @@ class SyncRuleTests(unittest.TestCase):
         e=Env(self, live_like(edited('l4-critical', modeId='plan'))); before=e.snap()
         code, out=e.apply()                       # no state record at all
         self.assertEqual((code, out['profiles']['l4-critical']['action'], out['conflicts']), (1, 'conflict', ['l4-critical']))
-        self.assertEqual(e.snap(), before)
+        self.assertEqual(e.snap()[:2], before[:2])      # the config is untouched; only the baseline of the matching profiles is recorded
+        self.assertNotIn('l4-critical', json.loads((e.state/'state.json').read_text())['profiles'])
         e.seed({'l4-critical':{'modeId':'auto'}})  # state says we wrote 'auto', file says 'plan': hand edit
         code, out=e.apply(); self.assertEqual((code, out['changes']), (1, 0)); self.assertEqual(e.snap()[:2], before[:2])
         code, out=e.apply('--overwrite','l4-critical')
@@ -383,6 +421,13 @@ class RestoreTests(unittest.TestCase):
         e=self.e; real=e.d/'real'; real.mkdir(mode=0o700); (real/self.backup.name).write_bytes(self.orig)
         import shutil; shutil.rmtree(e.state/'backups'); (e.state/'backups').symlink_to(real)
         code, out=self.rest(e.state/'backups'/self.backup.name); self.assertEqual((code, out['error']), (2, 'backups_dir_unsafe'))
+
+    def test_restore_refuses_state_of_another_config(self):
+        e=self.e; st=json.loads((e.state/'state.json').read_text()); st['config_path']='/elsewhere/config.json'; (e.state/'state.json').write_text(json.dumps(st))
+        before=e.snap(); nb=len(e.backups())
+        for plan in (None, '0'*64):
+            code, out=self.rest(self.backup, plan); self.assertEqual((code, out['error']), (2, 'state_config_mismatch'))
+        self.assertEqual(e.snap(), before); self.assertEqual(len(e.backups()), nb)
 
     def test_restore_rejects_sync_only_flags(self):
         e=self.e; a=self.rargs(self.backup)+['--include-provisional']

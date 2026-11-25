@@ -199,7 +199,8 @@ def _backup(state_dir, raw):
         raise
     return path
 
-def _load_state(state_dir):
+def _load_state(state_dir, config_path):
+    """Last-applied values per profile. A state written for another config file (or without a path) is refused, never mixed in."""
     if not _private_dir(state_dir, 'state_dir_unsafe'): return {}
     p=Path(state_dir)/'state.json'
     try: os.lstat(p)
@@ -209,15 +210,16 @@ def _load_state(state_dir):
         profiles=data['profiles']
         if data['schema']!=1 or not isinstance(profiles, dict) or any(not isinstance(v, dict) for v in profiles.values()): raise ValueError()
     except (ValueError, TypeError, KeyError): raise PolicyError('state_invalid')
+    if data.get('config_path')!=os.path.abspath(config_path): raise PolicyError('state_config_mismatch')
     return profiles
 
-def _save_state(state_dir, profiles, config_sha256):
+def _save_state(state_dir, profiles, config_sha256, config_path):
     _private_dir(state_dir, 'state_dir_unsafe', create=True)
     path=Path(state_dir)/'state.json'; tmp=Path(state_dir)/('.state.%s.tmp'%secrets.token_hex(6))
     fd=os.open(tmp, os.O_WRONLY | os.O_CREAT | os.O_EXCL | os.O_NOFOLLOW, 0o600)
     try:
         with os.fdopen(fd, 'wb') as f:
-            f.write((json.dumps({'schema':1,'config_sha256':config_sha256,'profiles':profiles}, indent=2, sort_keys=True)+'\n').encode())
+            f.write((json.dumps({'schema':1,'config_path':os.path.abspath(config_path),'config_sha256':config_sha256,'profiles':profiles}, indent=2, sort_keys=True)+'\n').encode())
             f.flush(); os.fchmod(f.fileno(), 0o600); os.fsync(f.fileno())
         os.replace(tmp, path); tmp=None; _sync_dir(state_dir)
     finally:
@@ -235,6 +237,10 @@ def _parse(raw):
     return data, profiles
 
 def _dump(data): return (json.dumps(data, indent=2, ensure_ascii=False)+'\n').encode('utf-8')
+
+def _recorded(want):
+    """What a profile looks like once it matches the policy (an unset thinking option is recorded as None)."""
+    d=_desired(want); d.setdefault('thinkingOptionId', None); return d
 
 def _desired(want):
     d={'provider':want['provider'],'model':want['model'],'modeId':want['modeId']}
@@ -259,7 +265,7 @@ def plan_sync(raw, config_path, config, *, model_catalog, state, include_provisi
     for x in profiles:
         if x['id'] in managed and x['id'] in by_id: raise PolicyError('duplicate_profile_id')
         by_id.setdefault(x['id'], x)
-    rows, writes=({}, {})
+    rows, writes, record=({}, {}, {})
     for pid, (want, alias) in managed.items():
         desired=_desired(want); cur=by_id.get(pid); row={'action':None,'fields':[]}
         if cur is None:
@@ -285,6 +291,7 @@ def plan_sync(raw, config_path, config, *, model_catalog, state, include_provisi
                     row['action']='update'
                     if unsafe: row['overwritten']=True
         if row['action'] in ('create','update'): writes[pid]=desired
+        if row['action'] in ('noop','create','update'): record[pid]=_recorded(want)   # adopted baseline for later conflict checks
         rows[pid]=row
     conflicts=[p for p, r in rows.items() if r['action']=='conflict']
     refusals=[p for p, r in rows.items() if r['action'].startswith('refused:')]
@@ -298,7 +305,7 @@ def plan_sync(raw, config_path, config, *, model_catalog, state, include_provisi
     body={'schema':1,'operation':'sync','config_path':os.path.abspath(config_path),'config_sha256':digest(raw),'include_provisional':bool(include_provisional),
           'overwrite':sorted(overwrite),'profiles':rows,'changes':len(writes),'conflicts':conflicts,'refusals':refusals,
           'after_sha256':digest(new_bytes) if new_bytes is not None else None}
-    return {'body':body,'plan_sha256':digest(encode(body)),'new_bytes':new_bytes,'writes':writes}
+    return {'body':body,'plan_sha256':digest(encode(body)),'new_bytes':new_bytes,'writes':writes,'record':record}
 
 def _verify_hash(given, plan):
     if given is None: return
@@ -317,11 +324,15 @@ def run_sync(a):
     overwrite={x for chunk in (a.overwrite or []) for x in chunk.split(',') if x}
     if overwrite-set(config['paseo_profiles']): raise PolicyError('overwrite_unknown_id')
     raw=_read_bytes(a.config)
-    plan=plan_sync(raw, a.config, config, model_catalog=catalog, state=_load_state(_state_dir(a)), include_provisional=a.include_provisional, overwrite=overwrite)
+    plan=plan_sync(raw, a.config, config, model_catalog=catalog, state=_load_state(_state_dir(a), a.config), include_provisional=a.include_provisional, overwrite=overwrite)
     _verify_hash(a.plan_sha256, plan)
     body=plan['body']; code=1 if body['conflicts'] or body['refusals'] else 0
     if a.plan_sha256 is None: return _result(body, plan['plan_sha256'], False, dry_run=True), code
-    if not plan['writes']: return _result(body, plan['plan_sha256'], False, dry_run=False), code
+    if not plan['writes']:
+        # Nothing to write to the config (its bytes and mtime stay untouched), but the matching profiles are the adopted baseline.
+        state=_load_state(_state_dir(a), a.config); state.update(plan['record'])
+        _save_state(_state_dir(a), state, digest(raw), a.config)
+        return _result(body, plan['plan_sha256'], False, dry_run=False, state_saved=True), code
     mode=stat.S_IMODE(os.stat(a.config).st_mode)
     backup=_backup(_state_dir(a), raw)
     _write_atomic(a.config, plan['new_bytes'], digest(raw), mode)
@@ -331,9 +342,9 @@ def run_sync(a):
     got={x['id']:x for x in now}
     if after!=plan['new_bytes'] or any(got.get(pid, {}).get(f, KeyError)!=v for pid, want in plan['writes'].items() for f, v in want.items()):
         raise PolicyError('post_write_verification_failed')
-    state=_load_state(_state_dir(a)); state.update({pid: dict(v) for pid, v in plan['writes'].items()})
-    _save_state(_state_dir(a), state, digest(after))
-    return _result(body, plan['plan_sha256'], True, dry_run=False, backup=str(backup)), code
+    state=_load_state(_state_dir(a), a.config); state.update(plan['record'])
+    _save_state(_state_dir(a), state, digest(after), a.config)
+    return _result(body, plan['plan_sha256'], True, dry_run=False, backup=str(backup), state_saved=True), code
 
 # ---- restore -----------------------------------------------------------------------------------------------------------------------------
 def _resolve_backup(state_dir, arg):
@@ -359,6 +370,7 @@ def _resolve_backup(state_dir, arg):
 
 def run_restore(a):
     path, braw=_resolve_backup(_state_dir(a), a.restore)
+    _load_state(_state_dir(a), a.config)   # a state for another config file is refused here too
     raw=_read_bytes(a.config)   # the file being replaced may itself be broken; only its bytes matter
     body={'schema':1,'operation':'restore','config_path':os.path.abspath(a.config),'config_sha256':digest(raw),'backup':path.name,'backup_sha256':digest(braw),
           'changes':int(raw!=braw)}
