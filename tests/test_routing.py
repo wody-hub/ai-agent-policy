@@ -50,8 +50,11 @@ class RoutingTests(unittest.TestCase):
         self.assertTrue(x['escalated']); self.assertTrue(x['handoff_fields'])
         x=r(host='orca', level=3, failures=2); self.assertEqual(pick(x), ('opus','high'))
         self.assertEqual(pick(r(host='codex', level=3, failures=2)), ('sol','high'))
+        # the one counted failure at LEVEL 2 now retries on the lateral standard-tier model (Terra) instead of the same model
         x=r(host='orca', level=2, failures=1, failure_kind='reasoning')
-        self.assertEqual((x['action'], pick(x), x['escalated']), ('retry', ('luna','high'), False))
+        self.assertEqual((x['action'], pick(x), x['escalated']), ('retry', ('terra','high'), False))
+        x=r(host='orca', level=3, failures=1, failure_kind='reasoning')
+        self.assertEqual((x['action'], pick(x), x['escalated']), ('retry', ('sonnet','high'), False))
         x=r(host='orca', level=4, failures=2, failure_kind='verification')
         self.assertEqual((x['action'], pick(x)), ('escalate', ('fable','high')))
         self.assertTrue(x['preserve_state'] and x['handoff_fields'])
@@ -223,5 +226,79 @@ class RoutingTests(unittest.TestCase):
         self.assertEqual((code, x['action']), (40, 'blocked_no_available_model'))
         self.assertEqual(run('--host','nope','--task-type','docs'), (30, {'schema':1,'error':'unknown_host'}))
         self.assertEqual(run('--host','orca','--task-type','docs','--config','/nonexistent.json')[1]['error'], 'routing_config_invalid')
+
+PATH_HOSTS={
+    # (level, alias, effort) for every attempt when each attempt fails with a counted failure, starting at LEVEL 1
+    'orca':   [(1,'luna','medium'),(1,'luna','medium'),(2,'luna','high'),(2,'terra','high'),(3,'sonnet','high'),(3,'sonnet','high'),(4,'opus','high'),(4,'opus','high'),(5,'fable','high'),(5,'fable','high')],
+    'paseo':  [(1,'luna','medium'),(1,'luna','medium'),(2,'luna','high'),(2,'terra','high'),(3,'sonnet','high'),(3,'sonnet','high'),(4,'opus','high'),(4,'opus','high'),(5,'fable','high'),(5,'fable','high')],
+    'codex':  [(1,'luna','medium'),(1,'luna','medium'),(2,'luna','high'),(2,'terra','high'),(3,'luna','xhigh'),(3,'luna','xhigh'),(4,'sol','high'),(4,'sol','high'),(5,'astra','high'),(5,'astra','high')],
+    'claude': [(1,'sonnet','low'),(1,'sonnet','low'),(2,'sonnet','medium'),(2,'sonnet','medium'),(3,'sonnet','high'),(3,'sonnet','high'),(4,'opus','high'),(4,'opus','high'),(5,'fable','high'),(5,'fable','high')],
+}
+
+def walk(host, **kw):
+    """Fail every attempt (counted failure) from LEVEL 1; an escalate result is the first attempt at its new level."""
+    x=r(host=host, level=1, **kw); attempts=[(x['level'], x['alias'], x['effort'])]; level=1; f=0
+    for _ in range(40):
+        f+=1
+        x=r(host=host, level=level, failures=f, failure_kind='verification', **kw)
+        if x['action']=='retry': attempts.append((x['level'], x['alias'], x['effort']))
+        elif x['action']=='escalate': level, f=x['level'], 0; attempts.append((x['level'], x['alias'], x['effort']))
+        else: return attempts, x
+    raise AssertionError('no termination')
+
+class LateralStepTests(unittest.TestCase):
+    def test_full_escalation_path_and_total_attempts(self):
+        for host, expected in PATH_HOSTS.items():
+            with self.subTest(host=host):
+                attempts, last=walk(host)
+                self.assertEqual(attempts, expected)
+                self.assertEqual(len(attempts), 10)                       # 2 attempts per level, 5 levels, bounded
+                self.assertEqual(sum(1 for a in attempts if a[0]==2), 2)  # Luna + lateral = exactly the two LEVEL 2 attempts
+                self.assertEqual(last['action'], 'handoff_to_lead')
+                self.assertEqual(len([a for a in attempts if a[0]<4]), 6)  # at most six attempts before LEVEL 4
+        self.assertNotIn('claude', C['levels']['2']['lateral'])      # the claude host has no Codex tool, so no lateral
+
+    def test_lateral_is_standard_tier_never_premium_and_never_sol(self):
+        for host in ('orca','paseo','codex'):
+            x=r(host=host, level=2, failures=1, failure_kind='verification')
+            self.assertEqual((x['alias'], x['tier'], x['action'], x['fallback_used'], x['premium'], x['lateral']), ('terra','standard','retry',False,False,True))
+            self.assertIn('lateral_step', x['reasons'])
+        # Sol is never a default or lateral for LEVEL 1-3 or any role; it stays the LEVEL 4 codex/alternate choice only
+        for lv in ('1','2','3'):
+            for k, e in C['levels'][lv].items():
+                if k in C['hosts']: self.assertNotEqual(e[0], 'sol')
+                if k.endswith('_alternatives') or k=='lateral': self.assertNotIn('sol', str(e))
+        self.assertFalse(any(e['paseo'][0]=='sol' or any(h[0]=='sol' for h in e.get('orca_alternatives', ())) for e in C['roles'].values()))
+        x=r(host='claude', level=2, failures=1, failure_kind='verification')
+        self.assertEqual((pick(x), x['lateral']), (('sonnet','medium'), False))  # no Codex tool: same model
+
+    def test_lateral_unavailable_goes_to_level_3_never_opus(self):
+        x=r(host='orca', level=2, failures=1, failure_kind='verification', available=['luna','sonnet','opus','sol'])
+        self.assertEqual((x['action'], x['level'], x['alias'], x['lateral']), ('escalate', 3, 'sonnet', False))
+        self.assertIn('lateral_unavailable:terra', x['reasons'])
+        for host in ('orca','paseo'):
+            x=r(host=host, level=2, failures=1, failure_kind='verification', available=['sol','opus'])
+            self.assertEqual((x['action'], x['alias'], x['level']), ('blocked_no_available_model', None, 3))
+        # fallbacks are off for the lateral step: unavailable Terra never turns into Sonnet, Luna or Opus at LEVEL 2
+        self.assertNotEqual(r(host='paseo', level=2, failures=1, failure_kind='verification', available=['opus','sonnet'])['level'], 2)
+
+    def test_lateral_applies_to_task_types_and_not_to_roles_or_non_model_failures(self):
+        self.assertEqual(pick(r(host='orca', task_type='feature', failures=1, failure_kind='verification')), ('terra','high'))
+        self.assertEqual(pick(r(host='orca', role='project_coordinator', failures=1, failure_kind='verification')), ('luna','high'))
+        self.assertEqual(pick(r(host='orca', level=2, failures=1, failure_kind='environment')), ('luna','high'))
+        self.assertEqual(r(host='orca', level=2, failures=0)['alias'], 'luna')
+        self.assertEqual(r(host='orca', level=2, failures=2, failure_kind='verification')['level'], 3)
+        self.assertFalse(r(host='orca', level=2, failures=0)['lateral'])
+
+    def test_lateral_on_paseo_overrides_task_route_and_orchestrator_roles_are_untouched(self):
+        # Paseo uses orca_task_routes for tasks; the lateral step must replace the routed choice, not be hidden by it.
+        x=r(host='paseo', task_type='feature')
+        self.assertEqual((pick(x), x['lateral']), (('luna','high'), False))
+        x=r(host='paseo', task_type='feature', failures=1, failure_kind='verification')
+        self.assertEqual((pick(x), x['lateral'], x['paseo_create_agent']['provider']), (('terra','high'), True, 'codex/gpt-6.1-terra'))
+        self.assertIsNone(x['paseo_profile'])
+        for role in ('root_orchestrator','project_coordinator'):
+            x=r(host='paseo', role=role, failures=1, failure_kind='verification')
+            self.assertEqual((pick(x), x['lateral']), (('sonnet','high'), False))
 
 if __name__=='__main__': unittest.main()

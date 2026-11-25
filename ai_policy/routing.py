@@ -49,6 +49,13 @@ def load_config(path=None):
         if not isinstance(h, dict) or not isinstance(h.get('tools'), list): _bad()
         ot=h.get('orchestrator_tools')
         if ot is not None and (not isinstance(ot, list) or not set(ot)<=set(h['tools'])): _bad()
+    for e in c['levels'].values():
+        lateral=e.get('lateral', {})
+        if not isinstance(lateral, dict): _bad()
+        for h, e2 in lateral.items():
+            if h not in hosts: _bad()
+            _pick(c, e2)
+            if c['models'][e2[0]]['tier'] in c['limits'].get('premium_tiers', ()): _bad()
     _validate_paseo(c)
     task_routes = c.get('orca_task_routes', {})
     if not isinstance(task_routes, dict): _bad()
@@ -205,7 +212,7 @@ def route(config, *, host, level=None, task_type=None, role=None, failures=0, fa
         if task_type in risky:
             base, high_risk=4, True
             reasons.append('high_risk_type')
-    cur, action, escalated=base, 'run', False
+    cur, action, escalated, lateral=base, 'run', False, None
     top=max(int(k) for k in config['levels'])
     def up(target):
         nonlocal cur, action, escalated
@@ -223,16 +230,25 @@ def route(config, *, host, level=None, task_type=None, role=None, failures=0, fa
     elif failure_kind is not None or failures>0:
         if failures>=esc['reasoning_failures_before_escalation']:
             reasons.append('failure_threshold_reached'); up(min((cur or config['roles'][role]['level'])+1, top))
-        else: action='retry'; reasons.append('below_failure_threshold')
+        else:
+            action='retry'; reasons.append('below_failure_threshold')
+            # The last allowed attempt at a level with a lateral model goes to that standard-tier model; it has no fallbacks.
+            # Roles and non-model failures never take the lateral step; the lateral model is a worker, never an orchestrator.
+            entry_lateral=config['levels'].get(str(cur), {}).get('lateral', {}).get(host) if role is None and cur and failures==esc['reasoning_failures_before_escalation']-1 else None
+            if entry_lateral and failure_kind in (None, *esc['counted_failure_kinds']) and entry_lateral[0]!=config['levels'][str(cur)][host][0]:
+                model_id, _=_resolved_model(config['models'][entry_lateral[0]], model_catalog)
+                if _usable(config, host, entry_lateral[0], available, model_id, False): lateral=tuple(entry_lateral); reasons.append('lateral_step')
+                else: reasons.append('lateral_unavailable:'+entry_lateral[0]); up(cur+1)
     lv=config['levels'][str(cur)] if cur else None
     task_choices = ()
     alt_key, routes_key = _host_keys(config, host)
-    if routes_key and cur is not None and cur == base and not high_risk and cur < 4 and (level is None or level == config['task_types'].get(task_type)):
+    if routes_key and cur is not None and cur == base and not high_risk and cur < 4 and lateral is None and (level is None or level == config['task_types'].get(task_type)):
         task_choices = config.get(routes_key, {}).get(task_type, ())
     selected = lv if lv else config['roles'][role]
     orchestrator = lv is None and selected.get('orchestrator') is True
     entry = task_choices[0] if task_choices else selected[host]
     alternatives = task_choices[1:] if task_choices else selected.get(alt_key) if alt_key else None
+    if lateral is not None: entry, alternatives, orchestrator=lateral, (), False
     palias, peffort=entry
     fallback_used=False
     if cur==top and top>4: reasons.append('last_resort')
@@ -258,7 +274,7 @@ def route(config, *, host, level=None, task_type=None, role=None, failures=0, fa
     if chosen and chosen[0]!=palias: fallback_used=True
     out={'schema':1,'host':host,'level':cur,'level_name':lv['name'] if lv else None,'task_type':task_type,'role':role,
          'alias':None,'tool':None,'agent':None,'model':None,'model_resolution':None,'effort':None,'tier':None,'action':action,'escalated':escalated,
-         'fallback_used':fallback_used,'high_risk':high_risk,'human_gate':high_risk,'premium':False,'preserve_state':False,
+         'fallback_used':fallback_used,'high_risk':high_risk,'human_gate':high_risk,'premium':False,'lateral':lateral is not None,'preserve_state':False,
          'attempts_reset':bool(esc.get('attempt_count_resets_on_model_change', False)),'reasons':reasons,'handoff_fields':[],'orca_worker_args':[]}
     if chosen is None:
         out['action']=action='blocked_no_available_model'; reasons.append('no_available_model')

@@ -43,7 +43,9 @@
   },
   "levels": {
     "1": {"name": "simple",   "orca": ["luna", "medium"],  "paseo": ["luna", "medium"], "claude": ["sonnet", "low"],    "codex": ["luna", "medium"]},
-    "2": {"name": "general",  "orca": ["luna", "high"], "orca_alternatives": [["sonnet", "high"]], "paseo": ["luna", "high"], "paseo_alternatives": [["sonnet", "high"]], "claude": ["sonnet", "medium"], "codex": ["luna", "high"]},
+    "2": {"name": "general",  "orca": ["luna", "high"], "orca_alternatives": [["sonnet", "high"]], "paseo": ["luna", "high"], "paseo_alternatives": [["sonnet", "high"]], "claude": ["sonnet", "medium"], "codex": ["luna", "high"],
+          "lateral": {"orca": ["terra", "high"], "codex": ["terra", "high"], "paseo": ["terra", "high"]},
+          "lateral_note": "After one counted failure at LEVEL 2 the standard-tier lateral model gets the second and last LEVEL 2 attempt; fallbacks are off for this step. Never a premium model."},
     "3": {"name": "complex",  "orca": ["sonnet", "high"], "orca_alternatives": [["terra", "high"]], "paseo": ["sonnet", "high"], "paseo_alternatives": [["terra", "high"]],   "claude": ["sonnet", "high"],   "codex": ["luna", "xhigh"]},
     "4": {"name": "critical", "orca": ["opus", "high"],     "claude": ["opus", "high"],     "codex": ["sol", "high"],
           "orca_alternatives": [["sol", "high"]], "paseo": ["opus", "high"], "paseo_alternatives": [["sol", "high"]]},
