@@ -1,6 +1,6 @@
 # Paseo 프로젝트 공통 전략 설치 지시서
 
-버전: `paseo-project-policy@v0.1.0-draft` · 기준일: 2026-11-25 · 모델 라우팅: 1.6.0
+버전: `paseo-project-policy@v0.1.0-draft` · 기준일: 2026-11-25 · 모델 라우팅: 1.7.0
 
 상태: 초안. 사용자 검토·승인 전에는 프로젝트에 설치하는 정본으로 쓰지 않는다. 이 문서는 [Orca 프로젝트 공통 전략 설치 지시서](orca-project-setup.md)(병행기 보관)를 Paseo 기준으로 옮긴 것이며, 같은 Task·Gitflow·검증 규칙을 Paseo의 에이전트·워크스페이스 모델에 맞춘다. Orca 전용 단계(`run-create`, Dispatch release, `consumer_fenced`·`run-use`, Orca parent workspace, `--no-parent`, `orca orchestration` 명령)는 대상이 없어 넣지 않았다.
 
@@ -26,7 +26,7 @@ Codex와 Claude Code 어느 쪽에서도 사용할 수 있는 프로젝트별 �
 너는 기존 프로젝트의 Paseo AI 개발 환경 설치 담당자다. 다음 정책을 프로젝트별로 설치하고 검증해줘. 기존 Codex·Claude 전역 지침은 수정하지 않는다. 프로젝트의 소스 구조·아키텍처·라이브러리·API·DB를 임의로 변경하지 않는다. Paseo 데몬 설정·프로필·플러그인·schedule은 변경하지 않는다.
 
 VERSION
-paseo-project-policy@v0.1.0-draft (실행 계약) · 모델 라우팅 1.6.0
+paseo-project-policy@v0.1.0-draft (실행 계약) · 모델 라우팅 1.7.0
 
 VARIABLES
 - PROJECT_ROOT: 현재 프로젝트. 여러 저장소를 묶는 상위 폴더일 수 있다.
@@ -98,8 +98,9 @@ POLICY B — 호스트에 중립적인 지휘와 실행
 POLICY C — 품질 우선 모델 라우팅 (정본: ai-agent-policy 저장소 policy/model-routing.json)
 - 우선순위: 필수 고위험 전문 경로 → 프로젝트·사용자 명시 지정 → 단순 작업 조건 → 작업 유형 → 복잡도 기본값. 이미 실행 중인 Root 모델은 시작 시 선택된 모델을 사용한다. 모델 배정에 맞춰 별도 역할이나 리뷰 게이트를 추가하지 않는다.
 - 프로필은 시작 구성일 뿐이다. `create_agent`에는 프로필 매개변수가 없으므로 Owner가 프로필의 provider·model·modeId·thinkingOptionId·options를 `create_agent`에 복사한다. 라우팅·시도 횟수·승격·대체 모델·동시 실행 한도는 Owner가 판정하고 이유를 원장에 기록한다.
+- 프로필 값의 정본은 `policy/model-routing.json`의 `paseo_profiles`이며 `python3 -B -m ai_policy.paseo check`로 실제 프로필과 대조한다(`sync`는 사용자 승인 후 드라이런·`--plan-sha256` 절차로만, 적용 뒤 데몬 재시작).
 - 새 Root는 `--role root_orchestrator`, Coordinator는 `--role project_coordinator`를 사용한다. 둘 다 Paseo 호스트에서 Sonnet high이며 대체 후보가 없다(Codex는 Paseo 도구가 없어 후보에서 제외). 사용자·프로젝트 지정을 보존한다.
-- LEVEL 1 단순은 명확한 소범위·자동 검증 가능·저위험을 모두 충족할 때 Luna medium(프로필 `dev-l1-simple`). LEVEL 2 일반 구현은 Luna high → Sonnet high(`dev-l2-general`), LEVEL 3 복잡 구현은 Sonnet high → Terra high(`dev-l3-complex`). 세부 유형은 [Orca 작업 유형별 모델 라우팅](docs/orca-model-routing.md)의 유형표를 그대로 쓴다(`orca_task_routes`는 Paseo 호스트도 공유한다).
+- LEVEL 1 단순은 명확한 소범위·자동 검증 가능·저위험을 모두 충족할 때 Luna medium(프로필 `dev-l1-simple`). LEVEL 2 일반 구현은 Luna high → Sonnet high(`dev-l2-general`)이며 계수 대상 실패 1회 뒤 두 번째 시도는 Terra high(수평 단계, 프로필 없음, 직접 구성), LEVEL 3 복잡 구현은 Sonnet high → Terra high(`dev-l3-complex`). 세부 유형은 [Orca 작업 유형별 모델 라우팅](docs/orca-model-routing.md)의 유형표를 그대로 쓴다(`orca_task_routes`는 Paseo 호스트도 공유한다).
 - 리뷰는 구현자와 다른 도구 또는 독립 컨텍스트로 한다: Codex 구현 → `code_review_codex`(Claude Sonnet medium, 프로필 `review-codex-work`, 중요 시 `important_review_codex`), Claude 구현 → `code_review_claude`(Terra high → Luna high, 프로필 `review-claude-work`). 읽기 전용 규칙: Claude 리뷰어는 `plan` 모드. Codex 리뷰어는 `features.plan_mode=true`를 권장하되 도구·샌드박스 차단이 아닌 지침 수준 제한이므로 «읽기 전용이 강제된다»고 주장하지 않는다. Codex 리뷰어의 읽기 전용 증거는 리뷰 전후 대상 워크스페이스의 `git status`·diff 동일 확인(필수)이며, 변경이 생기면 리뷰를 무효로 보고한다. 쓰기 차단이 반드시 필요한 중요 리뷰(보안·무결성 등)는 Claude `plan` 모드 리뷰어를 쓴다. 리뷰어는 commit하지 않는다.
 - LEVEL 4 고난도·고위험은 Opus high 또는 Sol high(`l4-critical`), LEVEL 5는 LEVEL 4에서 같은 문제를 두 번 실패한 경우에만 Fable high 또는 Astra high(`l5-last-resort`)를 사용한다.
 - Codex 모델 ID는 30일 이내의 지원 모델 cache에서 계열별로 해석한다. 명시 지정은 `--resolve-family <family> --effort <effort>`로 계열과 effort를 유지한다. `pinned_fallback`이면 캐시를 갱신한 뒤 세대와 접근을 확인한다. Paseo 프로필 메모의 모델 ID와 라우터의 고정 ID가 다를 수 있으므로(원인 미확인) `list_models`와 대조한다.

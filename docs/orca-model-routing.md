@@ -41,7 +41,7 @@
 | 입력 | 값 | 효과 |
 |---|---|---|
 | `--failed-family` | `claude` / `codex` / `both` (쉼표 구분) | LEVEL 4에서 실패한 계열. 하나만 지정하면 LEVEL 5 후보 중 반대 계열을 우선한다(`l5_opposite_family:<alias>`). `both`면 호스트 기본 후보를 유지한다. 그 밖의 값은 `unknown_failed_family`. |
-| `--failed-model` | 별칭 또는 id (쉼표 구분) | LEVEL 4에서 이미 실패한 `sol`을 후보에서 제외한다(`excluded_failed_model:sol`). |
+| `--failed-model` | 별칭 또는 id (쉼표 구분) | LEVEL 4에서 이미 실패한 모델을 후보에서 제외한다(`excluded_failed_model:<alias>`). 남는 후보가 없으면 `blocked_no_available_model`. |
 | `--implementer-family` | `claude` / `codex` | 교차 계열 리뷰 유형(`cross_family_review.task_types`)에서 리뷰어를 구현자와 다른 계열로 고른다. 그 밖의 값은 `unknown_implementer_family`. |
 
 결과 JSON의 추가 필드는 다음과 같다.
@@ -50,39 +50,18 @@
 - `premium_requires_reason`: 선택 모델이 premium·exceptional 등급이고 `limits.premium_requires_reason`이 켜져 있으면 `true`. 사유 없이 쓰지 않는다.
 - `degraded_independence`: 반대 계열 리뷰어가 없어 같은 계열 리뷰어로 진행하면 `true`(`reasons`에 `degraded_independence`).
 - `reasons` 추가 값: `lateral_step`, `lateral_unavailable:<alias>`, `l5_opposite_family:<alias>`, `l5_opposite_family_unavailable`, `excluded_failed_model:<alias>`, `degraded_independence`, `independent_reviewer_required`.
-- `action`: 보안 리뷰(`cross_family_review.blocking_types`)와 고위험 리뷰에 반대 계열 리뷰어가 없으면 `blocked_no_independent_reviewer`, 종료 코드 40(`blocked_no_available_model`과 같다). 일반 리뷰는 막지 않고 `degraded_independence`로 표시한다. 이 결과에서는 Worker를 띄우지 않는다.
+- `action`: 보안 리뷰(`cross_family_review.blocking_types`)와 고위험 리뷰에 반대 계열 리뷰어가 없으면 `blocked_no_independent_reviewer`, 종료 코드 40(`blocked_no_available_model`과 같다). 일반 리뷰는 막지 않고 `degraded_independence`로 표시한다. 이 결과에서는 Worker를 띄우지 않는다. `--host paseo`에서는 여기에 쓰기 차단 검사가 더해진다([Paseo 모델 라우팅](paseo-model-routing.md) 3.1절).
 
 ## LEVEL 2 수평 단계와 시도 횟수
 
-레벨당 계수 대상 실패는 2회까지 시도한다(`reasoning_failures_before_escalation`=2). LEVEL 2에서 실패가 1회 쌓이면 두 번째이자 마지막 시도는 `levels.2.lateral`의 표준 등급 모델(Terra high)로 보낸다. 이 단계는 대체 후보를 쓰지 않으며 premium 모델은 허용하지 않는다. Terra를 쓸 수 없으면 `lateral_unavailable:terra`와 함께 LEVEL 3으로 올린다. 실패 2회가 되면 LEVEL 3으로 승격한다. 따라서 LEVEL 2 시도는 2회, LEVEL 1에서 시작하면 LEVEL 4 전까지 최대 6회(레벨당 2회)다. 수평 단계는 레벨 기준 선택(`--level`/유형)에만 적용되고 역할(`--role`)에는 적용되지 않는다. 환경·권한 등 비모델 실패는 승격하지 않는다.
+레벨당 계수 대상 실패는 2회까지 시도한다(`reasoning_failures_before_escalation`=2). LEVEL 2에서 실패가 1회 쌓이면 두 번째이자 마지막 시도는 `levels.2.lateral`의 표준 등급 모델(Terra high)로 보낸다. 이 단계는 대체 후보를 쓰지 않으며 premium 모델은 허용하지 않는다. Terra를 쓸 수 없으면 `lateral_unavailable:terra`와 함께 LEVEL 3으로 올린다. 실패 2회가 되면 LEVEL 3으로 승격한다. 따라서 LEVEL 2 시도는 2회, LEVEL 1에서 시작하면 LEVEL 4 전까지 최대 6회(레벨당 2회)다. 수평 단계는 레벨 기준 선택(`--level`/유형)에만 적용되고 역할(`--role`)에는 적용되지 않는다. 환경·권한 등 비모델 실패는 승격하지 않는다. 이 단계는 모델 라우팅 1.7.0부터 Orca·codex·paseo 호스트 출력을 바꾼다(1.5.0·1.6.0에서는 같은 모델을 한 번 더 시도했다). Claude 호스트에는 수평 항목이 없어 그대로다.
 
 ## LEVEL 5 반대 계열 규칙
 
 LEVEL 5는 LEVEL 4가 같은 근본 원인에서 두 번 실패한 뒤에만 도달한다. `--failed-family`로 한 계열만 넘기면 반대 계열 후보(Claude 실패 → Astra, Codex 실패 → Fable)를 앞세운다. 이는 선호 규칙이며, 반대 계열을 쓸 수 없으면 `l5_opposite_family_unavailable`을 남기고 기존 후보 순서로 진행한다. LEVEL 5에서 다시 실패하면 `handoff_to_lead`다.
 
-## paseo 호스트와 `paseo_roles`
+## paseo 호스트와 `paseo_profiles`
 
-`hosts.paseo`는 Paseo가 관리하는 에이전트 프로필(`daemon.agentProfiles`)용 호스트이며 도구는 claude·codex다. Claude id는 정확한 id로 고정하고 명시적 동기화로만 올린다. `paseo_roles`의 키가 정책이 관리하는 프로필 id이며 13개(`root-orchestrator`, `project-coordinator`, `dev-l1-simple`, `dev-l2-general`, `dev-l3-complex`, `l4-critical`, `l5-last-resort`, `review-codex-work`, `review-claude-work`, `lookup`, `scout`, `ui-verify`, `l5-alt-astra`)다.
-
-- 각 항목은 `model`, `effort`, `mode_id`, `provider`, `pinned_id`, `description`을 가진다. `provider`는 모델의 도구와 같아야 하고 `pinned_id`는 Claude는 `models.<alias>.id`, Codex는 세대를 포함한 정확한 id(`gpt-6-luna` 형식, 계열 이름만은 불가)여야 한다.
-- `provisional: true`(`scout`, `ui-verify`, `l5-alt-astra`)인 프로필은 아직 만들지 않았을 수 있으며 없어도 드리프트가 아니다.
-- Paseo 프로필에는 위 필드 외 추가 필드를 넣지 않는다. 비교 대상은 `provider`, `model`, `modeId`, `thinkingOptionId`(effort가 null이면 제외)이며 `notes`는 `description`과 다르면 `notes_differ`로만 표시한다.
-- 정책 로드 시 프로필 id 형식, 중복 키, 모델·effort 유효성을 검증하고 어긋나면 `routing_config_invalid`다.
-
-## Paseo 드리프트 점검 (`ai_policy.paseo check`)
-
-`python3 -B -m ai_policy.paseo check [--config <config.json>] [--policy <model-routing.json>] [--model-catalog <models_cache.json>] [--paseo-models <list_models.json>]`
-
-읽기 전용이며 독립 실행 명령이다. 설정·Paseo를 쓰거나 호출하지 않고 네트워크도 쓰지 않는다. `ai_policy/__main__.py`는 Orca 설치 번들이 해시로 고정하므로 `paseo`는 `python -m ai_policy` 서브커맨드로 연결하지 않았다. 기본 `--config`는 `~/.paseo/config.json`이다.
-
-| 종료 코드 | 의미 |
-|---|---|
-| 0 | 드리프트 없음 |
-| 1 | 드리프트 있음 |
-| 2 | 입력 오류. 출력은 `{"schema":1,"error":"<코드>"}`(`paseo_config_unavailable`/`_invalid`/`_too_large`, `paseo_models_unavailable`/`_invalid`/`_too_large`, `routing_config_invalid`) |
-
-드리프트(종료 코드 1)는 관리 프로필의 `provider`/`model`/`modeId`/`thinkingOptionId` 불일치, 관리 프로필 누락(`provisional`이 아닌 것), 같은 id 중복이다. 다음은 참고 정보이며 종료 코드에 영향이 없다. `provisional` 프로필 누락(`missing_provisional`), `notes_differ`, `unmanaged_profiles`(정책에 없는 프로필), Codex 계열의 `newer_generation_available:<id>`와 `catalog_stale_or_missing`·`catalog_not_newer_than_pinned`, Claude의 `newer_alias_observed`(정책에 기록된 관찰값).
-
-`--paseo-models`는 Paseo `list_models`(provider claude) 결과를 저장한 JSON(`{"models":[{"id":...}]}` 또는 객체 목록)으로, 1 MiB 이하여야 한다. 지정하면 Claude 프로필마다 같은 계열에서 고정 id보다 높은 `claude-<family>-<버전>` id를 `newer_available`로 보고한다. 버전은 숫자 튜플로 비교하며 `[1m]` 접미사, 날짜 접미사, 별칭(`sonnet` 등), 해석할 수 없는 id는 무시한다. 이것도 드리프트가 아니며, 지정하지 않으면 별칭 변경은 실제 `list_models` 확인이 필요하다는 안내 한 줄을 출력한다.
+`hosts.paseo`는 Paseo가 관리하는 에이전트 프로필(`daemon.agentProfiles`)용 호스트이며 도구는 claude·codex다(오케스트레이터 역할은 claude만). 정책이 관리하는 프로필의 정본은 `policy/model-routing.json`의 `paseo_profiles`(13개, 그중 `scout`·`ui-verify`·`l5-alt-astra`는 임시)이고, 스키마(선택자·`expect`·`description`·`provisional`·`mode_id`와 파생 필드), `ai_policy.paseo check`(읽기 전용 드리프트 점검), `sync`와 `--restore`(드라이런 기본, `--plan-sha256`으로 적용, 백업·충돌·거부 규칙)는 [Paseo 모델 라우팅](paseo-model-routing.md) 6절이 설명한다. 이 문서의 Orca·claude·codex 호스트에는 영향이 없다. `ai_policy/__main__.py`는 설치 번들이 해시로 고정하므로 `paseo`는 `python -m ai_policy` 서브커맨드로 연결하지 않았다.
 
 운영 효과는 검증 완료 Task를 기준으로 실패·재시도·리뷰까지 포함해 비교한다. 합성 시험 결과는 초기 배정의 근거이며 비용·성능 서열을 보장하지 않는다.

@@ -6,7 +6,7 @@ AI에게 개발 업무를 맡길 때 **누가 일을 할지, 어디에서 작업
 
 필요한 파일을 AI에게 읽히고 설치를 요청하면, 이후 작업에서 따라야 할 지침과 지원되는 설정을 구성합니다. 아래에서 각 파일이 어떤 상황에 필요한지 설명하고, 뒤쪽에서 상세 운영 전략을 다룹니다.
 
-기준일: **2026-10-07** · 모델 라우팅: **1.6.0**(2026-11-25, Paseo 호스트 추가, Orca 값은 1.5.0과 동일) · Paseo 설치 지시서: **v0.1.0-draft**(2026-11-25, 사용자 승인 전 초안) · 단독 도구 전략: **1.4.0** · Orca 단일 Worker 조율 경량화: **2026-11-09**(보관). 모델·추론 수준·실행 기능은 계정과 제공자, 설치 버전에 따라 달라지므로 적용할 때 다시 확인합니다.
+기준일: **2026-10-07** · 모델 라우팅: **1.7.0**(2026-11-25, Paseo 호스트·LEVEL 2 Terra 수평 단계·교차 계열 리뷰 추가, Orca·codex 출력도 달라짐) · Paseo 설치 지시서: **v0.1.0-draft**(2026-11-25, 사용자 승인 전 초안) · 단독 도구 전략: **1.4.0** · Orca 단일 Worker 조율 경량화: **2026-11-09**(보관). 모델·추론 수준·실행 기능은 계정과 제공자, 설치 버전에 따라 달라지므로 적용할 때 다시 확인합니다.
 
 ## 파일 설명과 설치 방법
 
@@ -167,7 +167,7 @@ python3 -B -m ai_policy.routing --host paseo --task-type docs
 python3 -B -m ai_policy.routing --host paseo --role project_coordinator
 python3 -B -m ai_policy.routing --host paseo --task-type code_review_claude   # 리뷰 모드(paseo_review) 포함
 
-# 병행기 Orca 호스트 (JSON에 orca worker-start 인수 포함, 1.5.0과 출력 동일)
+# 병행기 Orca 호스트 (JSON에 orca worker-start 인수 포함. 1.7.0부터 LEVEL 2 수평 단계로 1.5.0과 출력이 다르다)
 python3 -B -m ai_policy.routing --host orca --task-type docs
 python3 -B -m ai_policy.routing --host codex --task-type docs --model-catalog /path/to/models_cache.json
 python3 -B -m ai_policy.routing --host orca --resolve-family terra --effort high  # 프로젝트가 선택한 계열과 effort 유지, 버전 ID만 최신화
@@ -303,10 +303,10 @@ Root(프로필 `root-orchestrator`)는 사용자 의도와 최종 판단·동시
 | LEVEL 1 단순 작업·문서·테스트 | Luna medium | Sonnet 5.5 |
 | LEVEL 2 일반 개발 | Luna high | Sonnet high |
 | LEVEL 3 복잡한 개발 | Sonnet 5.5 high | Terra high |
-| LEVEL 4 승격·고위험 | Opus 5.5 high 또는 Sol 6.1 high | 서로 대체 |
+| LEVEL 4 승격·고위험 | Opus 5.5 high 또는 Sol 6.2 high | 서로 대체 |
 | LEVEL 5 최종 단계 (LEVEL 4 2회 실패 후) | Fable 5.1 high | Astra high |
 
-세부 유형은 [Orca 작업 유형별 모델 라우팅](docs/orca-model-routing.md)의 표를 Paseo도 그대로 씁니다(`orca_task_routes` 공유). Owner는 `python3 -B -m ai_policy.routing --host paseo ...` 결과의 `action`을 확인한 뒤 `paseo_create_agent`와 `paseo_profile`로 `create_agent`를 만듭니다. 결과의 요청값과 실제 실행값(확인 방법은 미확인)을 따로 기록합니다. 리뷰어는 구현자와 다른 도구 또는 독립 컨텍스트로 하며, Claude 리뷰어는 `plan` 모드, Codex 리뷰어는 `plan_mode`를 권장하되 **읽기 전용이 강제된다고 주장하지 않고** 리뷰 전후 `git status`·diff 무변경 검사를 필수 증거로 합니다. 쓰기 차단이 필요한 중요 리뷰는 Claude `plan` 모드 리뷰어를 씁니다.
+세부 유형은 [Orca 작업 유형별 모델 라우팅](docs/orca-model-routing.md)의 표를 Paseo도 그대로 씁니다(`orca_task_routes` 공유). LEVEL 2는 계수 대상 실패 1회 뒤 두 번째 시도를 Terra high로 보낸다(수평 단계). 프로필의 정본은 `policy/model-routing.json`의 `paseo_profiles`이며 `python3 -B -m ai_policy.paseo check`(읽기 전용)·`sync`(드라이런 기본)로 `~/.paseo/config.json`과 맞춥니다([상세](docs/paseo-model-routing.md) 6절). Owner는 `python3 -B -m ai_policy.routing --host paseo ...` 결과의 `action`을 확인한 뒤 `paseo_create_agent`와 `paseo_profile`로 `create_agent`를 만듭니다. 결과의 요청값과 실제 실행값(확인 방법은 미확인)을 따로 기록합니다. 리뷰어는 구현자와 다른 도구 또는 독립 컨텍스트로 하며, Claude 리뷰어는 `plan` 모드, Codex 리뷰어는 `plan_mode`를 권장하되 **읽기 전용이 강제된다고 주장하지 않고** 리뷰 전후 `git status`·diff 무변경 검사를 필수 증거로 합니다. 쓰기 차단이 필요한 중요 리뷰는 Claude `plan` 모드 리뷰어를 씁니다.
 
 ### 생명주기와 신뢰성
 

@@ -1,6 +1,6 @@
 # Paseo 모델 라우팅 (draft 0.1.1)
 
-상태: 초안(2026-11-25, 같은 날 사용자 확정 결정 반영, Q3 Codex 리뷰어 읽기 전용은 2026-11-25 시험 결과로 확정: plan_mode 권장, 강제 주장 금지, 무변경 검사 필수). 정본 값은 [`policy/model-routing.json`](../policy/model-routing.json)(1.6.0)이며 이 문서는 그 값을 Paseo 프로필에 대응시키는 규칙이다. `model-routing.json`은 2B(2026-11-25)에서 1.6.0으로 올려 제안 P1~P4를 반영했다(5절에 반영·미반영 구분). 라우터는 `--host paseo`를 지원한다. Orca용 세부 유형표는 [Orca 작업 유형별 모델 라우팅](orca-model-routing.md)을 그대로 쓴다.
+상태: 초안(2026-11-25, 같은 날 사용자 확정 결정 반영, Q3 Codex 리뷰어 읽기 전용은 2026-11-25 시험 결과로 확정: plan_mode 권장, 강제 주장 금지, 무변경 검사 필수). **정본은 [`policy/model-routing.json`](../policy/model-routing.json)(1.7.0)이다.** Paseo 프로필의 provider·model·modeId·thinkingOptionId·notes는 JSON의 `paseo_profiles`에서 파생되며, `python3 -B -m ai_policy.paseo check|sync`가 `~/.paseo/config.json`과 대조·반영한다(6절). 이 문서는 그 값을 Paseo 프로필에 대응시키는 규칙이다. 1.7.0은 1.6.0(P1~P4)과 main의 수평 단계·교차 계열 리뷰 변경을 합친 것이고 P5를 적용했다(5절). 라우터는 `--host paseo`를 지원한다. Orca용 세부 유형표는 [Orca 작업 유형별 모델 라우팅](orca-model-routing.md)을 그대로 쓴다.
 
 ## 1. 원칙
 
@@ -18,11 +18,13 @@
 | `dev-l1-simple` | codex/gpt-6-luna · auto · medium | `levels.1`: Luna medium | 일치 |
 | `dev-l2-general` | codex/gpt-6-luna · auto · high | `levels.2`: Luna high → Sonnet high | 일치(대체는 프로필 없음, 필요 시 Sonnet high로 수동 구성) |
 | `dev-l3-complex` | claude/claude-sonnet-5-5 · auto · high | `levels.3`: Sonnet high → Terra high | 일치 |
-| `l4-critical` | claude/claude-opus-5-5 · auto · high | `levels.4`: Opus high → Sol high | 일치. 프로필 메모의 대체 ID `gpt-6.2-sol`은 json 고정 ID `gpt-6.1-sol`과 다르다(캐시 해석 결과인지 [미확인]) |
-| `l5-last-resort` | claude/claude-fable-5-1 · auto · high | `levels.5`: Fable high → Astra high | 일치. 메모의 `gpt-6.2-astra` vs json `gpt-6-astra` 동일 사유 [미확인] |
+| `l4-critical` | claude/claude-opus-5-5 · auto · high | `levels.4`: Opus high → Sol high | 일치. 프로필 메모의 대체 ID `gpt-6.2-sol`은 1.7.0 고정 ID(`models.sol.id`)와 같다(P5) |
+| `l5-last-resort` | claude/claude-fable-5-1 · auto · high | `levels.5`: Fable high → Astra high | 일치. 메모의 `gpt-6.2-astra`는 1.7.0 고정 ID(`models.astra.id`)와 같다(P5). Fable 5-2는 관찰만 했고 채택하지 않았다(`alias_observed`) |
 | `review-codex-work` | claude/claude-sonnet-5-5 · **plan** · medium | `code_review_codex`: Sonnet medium(중요 시 `important_review_codex` Sonnet high) | 일치. plan 모드로 읽기 전용 |
-| `review-claude-work` | codex/gpt-6.1-terra · auto · high | `code_review_claude`: Terra high → Luna high | 모델 일치. 읽기 전용이 모드로 강제되지 않는다(메모: "Instruct read-only"). `features.plan_mode=true`를 켜는 것을 권장하나(제안 P6, 사용자 승인 후 프로필 반영) 지침 수준 보호일 뿐 **강제가 아니다**. 읽기 전용 증거는 리뷰 전후 `git status`/diff 무변경 검사(필수). 2.1절 |
+| `review-claude-work` | codex/gpt-6.1-terra · auto · high | `code_review_claude`: Terra high → Luna high | 모델 일치. 읽기 전용이 모드로 강제되지 않는다(메모: "Instruct read-only"). `features.plan_mode=true`를 켜는 것을 권장하나(제안 P6, 미적용: `sync`가 `features`를 관리하지 않으므로 사용자가 프로필 설정에 직접 반영) 지침 수준 보호일 뿐 **강제가 아니다**. 읽기 전용 증거는 리뷰 전후 `git status`/diff 무변경 검사(필수). 2.1절 |
 | `lookup` | codex/gpt-6-luna · auto · medium | `roles.lookup`: Luna medium, `log_summary`: Luna low | 일치(log_summary는 thinking low로 변경해 생성) |
+
+위 10개는 `paseo_profiles`의 비임시 항목이며 `check`는 JSON 파생값과 실제 프로필이 같다고 보고한다(2026-11-25 실제 `~/.paseo/config.json` 읽기 전용 점검: `drift: false`, 변경 0). 임시(provisional) 항목 3개는 6.1절.
 
 ### 2.1 Codex 리뷰어 읽기 전용 (Q3, 2026-11-25 확정)
 
@@ -35,7 +37,7 @@
 1. Codex 리뷰어(`review-claude-work`)는 `features.plan_mode=true`를 켜는 것을 **권장**한다(지침 수준 보호).
 2. 그러나 «읽기 전용이 강제된다»고 주장하지 않는다. 읽기 전용의 증거는 **리뷰 전후 대상 worktree의 `git status`/diff가 같다는 확인(무변경 검사)**이며 이 검사는 필수다. 변경이 생기면 리뷰 결과를 무효로 하고 원인과 함께 보고한다(되돌리지 않고 Owner가 판단).
 3. 쓰기 차단이 반드시 필요한 중요 리뷰(보안·무결성 등)는 **Claude `plan` 모드 리뷰어**를 쓴다. 계열 교차를 포기하는 대신 모드 설명상 도구 실행이 막힌다. Claude `plan` 모드는 «도구 실행을 막는 모드로 설명됨(Paseo 모드 설명: «Analyze the codebase without executing tools or edits»)»이며 이 세션에서 쓰기 시도로 검증하지는 않았다.
-4. `review-claude-work`의 modeId가 `auto`이므로 plan_mode를 켜는 프로필 변경은 **제안 P6**(5절)로 두고 사용자 승인 후 프로필 설정에 반영한다. 이 단계에서 `~/.paseo/config.json`은 수정하지 않았다.
+4. `review-claude-work`의 modeId가 `auto`이므로 plan_mode를 켜는 프로필 변경은 **제안 P6**(5절)이며 아직 적용하지 않았다. `features`는 `sync`가 관리하지 않는 필드이므로 사용자가 프로필 설정에 직접 반영해야 한다.
 5. 리뷰어는 commit하지 않는다(Codex는 Paseo worktree에서 commit이 막히고 권한 모드를 올려 우회하지 않는다).
 
 세부 작업 유형(`requirements`, `decomposition`, `architecture`, `refactor_design`, `db_design`, `test_design` 등)이 Terra high나 Sonnet high를 기본으로 지정하는 경우, 맞는 프로필이 없으면 Owner가 정본 값으로 `provider`·`thinkingOptionId`를 직접 구성하고 선택 이유를 기록한다. 이를 위해 프로필을 새로 만들거나 바꾸는 것은 사용자 승인 사항이다.
@@ -43,8 +45,21 @@
 ## 3. 선택 절차
 
 1. 우선순위대로 판정: 필수 고위험 전문 경로(`high_risk_types`, LEVEL 4 유형) → 프로젝트·사용자 명시 지정 → 단순 작업 조건(명확한 소범위·자동 검증 가능·저위험을 모두 충족하면 LEVEL 1) → 작업 유형(`orca_task_routes`) → 복잡도 기본값(`levels`).
-2. 저장소 checkout이 있으면 라우터를 `--host paseo`로 실행해 판정을 얻는다: `python3 -B -m ai_policy.routing --host paseo --task-type <유형>`(또는 `--role`, `--level`, `--failures`, `--failure-kind`, `--available`). `action`이 `blocked_no_available_model`(종료 40)·`handoff_to_lead`(종료 41)이면 Worker를 만들지 않고 상위 Owner에 보고한다. Paseo 호스트 출력은 `orca_worker_args`를 비우고 `paseo_create_agent`(`provider`=`<tool>/<model>`, `settings.modeId`·`thinkingOptionId`, 리뷰의 `settings.features`)와 `paseo_profile`(2절 프로필 이름, 라우터 결과가 프로필 가정과 다르면 null)을 준다. 프로필에는 매개변수가 없으므로 Owner가 `paseo_create_agent` 값을 `create_agent`에 복사하거나 프로필의 값을 복사한다. `thinkingOptionId`는 effort 이름을 그대로 쓰며 대상 모델이 그 옵션을 지원하는지는 `inspect_provider`/`list_models`로 확인한다(미확인). 코드 값과 프로필 실제 값이 다르면 프로필 설정이 정본이다. 사용 불가·승격·처리 결과는 같은 `action` 규약(종료 40·41)을 따른다.
+2. 저장소 checkout이 있으면 라우터를 `--host paseo`로 실행해 판정을 얻는다: `python3 -B -m ai_policy.routing --host paseo --task-type <유형>`(또는 `--role`, `--level`, `--failures`, `--failure-kind`, `--available`). `action`이 `blocked_no_available_model`(종료 40)·`handoff_to_lead`(종료 41)이면 Worker를 만들지 않고 상위 Owner에 보고한다. Paseo 호스트 출력은 `orca_worker_args`를 비우고 `paseo_create_agent`(`provider`=`<tool>/<model>`, `settings.modeId`·`thinkingOptionId`, 리뷰의 `settings.features`)와 `paseo_profile`(2절 프로필 이름)을 준다. `paseo_profile`은 임시(provisional)가 아닌 프로필의 파생값(6.1절)과 라우터 결과의 모델 id·`modeId`·thinking이 모두 같을 때만 이름을 주고, 하나라도 다르면 null이다(예: Terra 수평 단계, 새 캐시 id, plan 모드로 도는 `important_review`, 임시 프로필만 맞는 Astra). 프로필에는 매개변수가 없으므로 Owner가 `paseo_create_agent` 값을 `create_agent`에 복사하거나 프로필의 값을 복사한다. `thinkingOptionId`는 effort 이름을 그대로 쓰며 대상 모델이 그 옵션을 지원하는지는 `inspect_provider`/`list_models`로 확인한다(미확인). 프로필 실제 값이 정책 JSON 파생값과 다르면 JSON이 정본이다(6절 `check`로 확인하고 `sync`로 맞춘다). 사용 불가·승격·처리 결과는 같은 `action` 규약(종료 40·41)을 따른다.
+   추가 입력(모든 호스트 공통): `--failed-family claude|codex|both`(쉼표 구분, LEVEL 4에서 실패한 계열. 하나만 주면 LEVEL 5에서 반대 계열 후보를 먼저 쓰고 `l5_opposite_family:<alias>`를 남긴다. 쓸 수 없으면 `l5_opposite_family_unavailable`, `both`·없음은 호스트 기본, 그 밖은 `unknown_failed_family`), `--failed-model <별칭 또는 id>`(LEVEL 4에서 그 모델을 건너뛴다, `excluded_failed_model:<alias>`, 남는 후보가 없으면 `blocked_no_available_model`), `--implementer-family claude|codex`(리뷰 유형에서 리뷰어를 반대 계열로 고른다, 3.1절, 그 밖은 `unknown_implementer_family`). 결과에 `lateral`, `degraded_independence`, `premium_requires_reason`(premium·exceptional 선택이면 true, 차단되면 false)이 항상 들어간다.
+   LEVEL 2 수평 단계: 레벨 기준 선택(`--level`·작업 유형)에서 계수 대상 실패가 1회 쌓이면 두 번째이자 마지막 LEVEL 2 시도는 `levels.2.lateral.paseo`(Terra high)로 간다(`lateral: true`, 이유 `lateral_step`, 대체 후보 없음). Terra를 쓸 수 없으면 `lateral_unavailable:terra`로 곧장 LEVEL 3으로 올린다. 역할(`--role`)과 비모델 실패에는 적용하지 않는다. 이 단계는 Orca·codex 호스트 출력도 바꾼다(Claude 호스트는 수평 항목이 없다). 레벨당 2회 시도이므로 LEVEL 1에서 시작하면 LEVEL 4 전까지 최대 6회, 전체 10회다.
 3. 선택된 tool·model·effort를 프로필에 대응시키고, 없으면 직접 구성한다. Codex 모델 ID는 30일 이내 `models_cache.json`에서 계열별로 해석하며, `pinned_fallback`이면 캐시를 갱신한 뒤 다시 확인한다. Paseo가 보여 주는 모델 목록(`list_models`)과 대조한다.
+   3.1 교차 계열 리뷰와 쓰기 차단(`--host paseo`): `--implementer-family`를 준 `cross_family_review.task_types`(`review`, `code_review_codex`, `code_review_claude`, `important_review`, `important_review_codex`, `security_review`) 리뷰는 먼저 구현자와 다른 계열 후보를 고른다. 다른 계열을 쓸 수 없으면 일반 리뷰는 같은 계열로 진행하되 `degraded_independence: true`(이유 `degraded_independence`)로 표시하고, `blocking_types`(`security_review`)와 고위험 리뷰는 `blocked_no_independent_reviewer`(종료 40, 상태 보존, Worker 생성 금지)다. 그다음 `review_mode`의 쓰기 차단 검사를 선택된 리뷰어에 적용한다: 쓰기 차단이 필요한 `security_review`에서 선택된 리뷰어가 Codex이면 막는다. 이 조합은 실패 시 닫는(fail-closed) 기본값이며 `security_review`에는 저하 경로를 두지 않는다. `implementer_family`를 준 경우 차단 action은 `blocked_no_independent_reviewer`, 주지 않은 경우(기존 동작)는 `blocked_no_available_model`이며 둘 다 종료 40이다.
+
+   | `security_review` (Paseo) | 사용 가능한 계열 | 결과 |
+   |---|---|---|
+   | 구현자 codex | Claude 포함 | 실행: Claude `plan` 모드 리뷰어(Sonnet high), `paseo_review.write_block_required: true` |
+   | 구현자 codex | Codex만 | 차단. 이유 `independent_reviewer_required`·`review_write_block_requires_claude_plan` 둘 다 기록 |
+   | 구현자 claude | Claude만 | 차단. 이유 `independent_reviewer_required` |
+   | 구현자 claude | 둘 다 | 차단: Codex는 쓰기 차단 조건에, Claude는 독립성 조건에 걸린다. 이유 두 가지 기록 |
+   | 구현자 미지정 | Claude 포함 / Codex만 | 실행(Claude plan) / `blocked_no_available_model`(`review_write_block_requires_claude_plan`) |
+
+   `review_mode.task_types`는 `cross_family_review.task_types`와 같아야 하며 로더가 검증한다(어긋나면 `routing_config_invalid`). 그래서 `important_review`도 Claude `plan` 모드 시작 구성을 받는다. 차단되는 결과의 `paseo_create_agent`·`paseo_profile`은 null이다. Orca·claude·codex 호스트에서는 독립성 검사만 적용하고 쓰기 차단 검사는 없다.
 4. 고위험 작업은 처음부터 LEVEL 4(`l4-critical` 또는 Sol high)로 분석·검토한다. 구현은 가능하면 LEVEL 2·3 Worker가 이어받는다.
 5. 리뷰어는 구현자와 다른 도구 또는 독립 컨텍스트로 한다: Codex 구현 → `review-codex-work`, Claude 구현 → `review-claude-work`.
 6. 선택 이유(라우터 JSON 또는 판정 근거), 프로필 id, 요청값, 확인한 실행값을 원장에 남긴다.
@@ -65,14 +80,55 @@
 
 비모델 실패 분류 추가(Paseo 특유): 알림 미도착, 수락 후 시작 근거 없음, 데몬 재시작으로 `closed`, 권한 요청 대기, `ANTHROPIC_BASE_URL`·로그인 환경 문제(#3618), 한국어 locale 문제(#3513), Codex Worker의 Paseo worktree `git add/commit` 샌드박스 거부(Git 메타데이터가 작업 폴더 밖, 2026-11-25 관측). 이것들은 승격 사유가 아니다. Codex commit 거부는 재시도하거나 권한 모드를 올려 우회하지 않고, «Codex Worker는 commit하지 않음» 규칙대로 diff 보고 후 Claude Worker 또는 Owner가 commit한다.
 
-## 5. `model-routing.json` 변경 제안과 반영 상태 (2B, 2026-11-25)
+## 5. `model-routing.json` 변경 제안과 반영 상태 (1.7.0, 2026-11-25)
 
-정본 `model-routing.json`은 1.6.0이며 변경 이력(`changelog`)을 포함한다. Orca·claude·codex 호스트의 값·selector·limits는 바꾸지 않았고, `--host orca|claude|codex` 출력은 1.5.0과 동일함을 대표 입력 141건으로 비교했다.
+정본 `model-routing.json`은 1.7.0이며 변경 이력(`changelog`)을 포함한다. 1.7.0은 `docs/paseo-policy-source`의 1.6.0(P1~P4)과 main의 58037de(번호 없는 1.6.0)를 합치고 P5를 적용한 것이다. 1.6.0과 달리 **Orca·codex 호스트 출력도 바뀐다**(LEVEL 2 수평 단계: 실패 1회 뒤 두 번째 시도가 Luna에서 Terra로 간다). 그 밖에 `failed_family`·`failed_models`·`implementer_family` 입력, `cross_family_review`, `premium_requires_reason`, 모델 id 갱신이 들어갔다.
 
-- **P1 host 추가 — 반영.** `hosts.paseo = {"tools": ["claude","codex"], "orchestrator_tools": ["claude"], "alternatives_key": "paseo_alternatives", "task_routes_key": "orca_task_routes", ...}`. 라우터는 `--host paseo` 출력으로 `paseo_create_agent`·`paseo_profile`·`paseo_review`를 내고 Paseo 호스트에서는 `orca_worker_args`를 비운다. 작업 유형 경로(`orca_task_routes`)는 Paseo 호스트가 공유한다. 모든 레벨·역할에 `paseo` 항목이 있다(레벨은 Orca 값과 동일).
-- **P2 역할 기본값 — 반영(Q7 결정됨).** Paseo 호스트에서 `root_orchestrator`·`project_coordinator`는 Sonnet high이고 대체가 없다(`paseo_alternatives: []`). `orchestrator: true` 역할은 `orchestrator_tools`(Claude)만 후보가 되므로 Codex는 제외되고, 사용할 수 없으면 `blocked_no_available_model`(종료 40)이다. 승격으로 레벨이 올라간 뒤에는 Worker로 취급한다. **Orca 호스트의 `project_coordinator` 대체 목록(Terra high)에는 Sonnet high를 추가하지 않았다**: 추가하면 Luna·Terra가 모두 불가할 때의 Orca 출력이 바뀌어 «Orca 값 불변» 조건과 충돌한다.
-- **P3 프로필 매핑 블록 — 반영.** `paseo_profiles`는 이름과 선택자(role·level·task_types+expect)만 둔다. 실제 provider·model·mode·thinking은 Paseo 설정이 정본이다. 라우터 결과 (alias, effort)가 프로필 가정과 같을 때만 프로필 이름을 안내한다.
-- **P4 리뷰 mode — 반영.** `review_mode`: claude는 `modeId: plan`(`enforced: null`, 쓰기 시도 검증 안 됨), codex는 `modeId: auto` + `features.plan_mode=true`, `enforced: false`, `evidence: git_status_diff_unchanged`. 대상 유형은 `review`·`code_review_codex`·`important_review_codex`·`code_review_claude`·`security_review`이며, `security_review`는 쓰기 차단이 필요한 유형(`write_block_required`)으로 표시한다. Codex 리뷰어가 선택되면 이유에 `review_write_block_requires_claude_plan`을 남긴다.
-- **P5 Codex 고정 ID 확인 — 미반영.** 프로필 메모의 `gpt-6.2-sol`/`gpt-6.2-astra`가 현재 캐시 해석 결과인지 확인하지 못했다(미확인 U-10). 확인 전에는 fallback ID를 바꾸지 않는다.
-- **P6 Codex 리뷰어 프로필의 plan_mode — 문서만.** `review-claude-work` 프로필에 `features.plan_mode=true`를 켜는 변경은 사용자 `~/.paseo/config.json` 반영이 필요하며 이 단계에서 설정 파일을 수정하지 않았다. 라우터 출력의 `paseo_create_agent`는 `settings.features.plan_mode=true`를 담으므로 Owner가 직접 구성할 때는 이미 반영된다. 사용자 설정 반영 후 새 리뷰어 세션에서 plan_mode 적용과 무변경 검사를 첫 사용 시 확인한다.
-- `verified_on`(2026-11-12)은 갱신하지 않았다. 모델 접근을 이번에 다시 확인하지 않았기 때문이다.
+- **P1 host 추가 — 반영.** `hosts.paseo = {"tools": ["claude","codex"], "orchestrator_tools": ["claude"], "alternatives_key": "paseo_alternatives", "task_routes_key": "orca_task_routes", "default_mode_id": "auto", ...}`. 라우터는 `--host paseo` 출력으로 `paseo_create_agent`·`paseo_profile`·`paseo_review`를 내고 Paseo 호스트에서는 `orca_worker_args`를 비운다. 작업 유형 경로(`orca_task_routes`)는 Paseo 호스트가 공유한다. 모든 레벨·역할에 `paseo` 항목이 있다(레벨은 Orca 값과 동일).
+- **P2 역할 기본값 — 반영(Q7 결정됨).** Paseo 호스트에서 `root_orchestrator`·`project_coordinator`는 Sonnet high이고 대체가 없다(`paseo_alternatives: []`). `orchestrator: true` 역할은 `orchestrator_tools`(Claude)만 후보가 되므로 Codex는 제외되고, 사용할 수 없으면 `blocked_no_available_model`(종료 40)이다. 승격으로 레벨이 올라간 뒤와 수평 단계의 Terra는 Worker로 취급한다. 로더는 오케스트레이터 역할의 프로필이 `orchestrator_tools` 밖의 도구를 쓰면 거부한다. **Orca 호스트의 `project_coordinator` 대체 목록(Terra high)에는 Sonnet high를 추가하지 않았다.**
+- **P3 프로필 블록 — 반영·확장.** `paseo_profiles`는 이제 관리 대상 프로필의 정본이다(6.1절 스키마). 1.6.0의 이름 전용 맵을 확장했다.
+- **P4 리뷰 mode — 반영.** `review_mode`: claude는 `modeId: plan`(`enforced: null`, 쓰기 시도 검증 안 됨), codex는 `modeId: auto` + `features.plan_mode=true`, `enforced: false`, `evidence: git_status_diff_unchanged`. 대상 유형은 `cross_family_review.task_types`와 같고(`important_review` 추가), `security_review`는 쓰기 차단이 필요한 유형(`write_block_required`)이다. Codex 리뷰어가 선택되면 이유에 `review_write_block_requires_claude_plan`을 남긴다.
+- **P5 Codex 고정 ID — 적용(1.7.0).** `sol`은 `gpt-6.2-sol`, `astra`는 `gpt-6.2-astra`(모델 `id`와 `codex_model_families` 양쪽). haiku는 `claude-haiku-5-5`(Paseo 별칭 해석 결과, efforts low~max를 선언하지만 라우트의 effort는 여전히 null이고 `lookup_only`). fable의 `claude-fable-5-2`는 `alias_observed`로 관찰만 기록했고 채택하지 않았다(`adopted: false`, 고정 id는 `claude-fable-5-1`, `access_verified_on`은 5-1 기준 2026-11-06 유지).
+- **P6 Codex 리뷰어 프로필의 plan_mode — 미적용.** `review-claude-work` 프로필에 `features.plan_mode=true`를 켜는 변경은 사용자 `~/.paseo/config.json` 반영이 필요하고 `sync`가 `features`를 관리하지 않으므로(결정 D2) 정책 도구가 적용하지 않는다. 라우터 출력의 `paseo_create_agent`는 리뷰의 `settings.features.plan_mode=true`를 담으므로 Owner가 직접 구성할 때는 이미 반영된다. 사용자 설정 반영 후 새 리뷰어 세션에서 plan_mode 적용과 무변경 검사를 첫 사용 시 확인한다.
+- **검증 범위(`verified_on` 2026-11-25, JSON `verification_scope`).** 검증됨: Codex 정확 id 4개(`gpt-6.2-sol`, `gpt-6.2-astra`, `gpt-6.1-terra`, `gpt-6-luna`)를 ChatGPT 계정의 Paseo codex로 실행했고, Claude 별칭 opus·haiku·fable이 각각 `claude-opus-5-5`·`claude-haiku-5-5`·`claude-fable-5-2`로 해석됨을 확인했다. 미검증: `claude-haiku-5-5`·`claude-sonnet-5-5`·`claude-fable-5-1`의 정확 id 실행, haiku 5-5의 effort 지원.
+
+## 6. 프로필 정본과 점검·동기화 (`ai_policy.paseo`)
+
+**정본 규칙: `policy/model-routing.json`이 정본이다.** `~/.paseo/config.json`의 `daemon.agentProfiles`는 JSON에서 파생한 값을 반영하는 대상이며, 어긋나면 JSON을 기준으로 고친다(이전 문서의 «Paseo 설정이 정본» 규칙은 폐기). 관리 대상은 `paseo_profiles`의 키뿐이며 그 밖의 프로필·`features`·`name` 등 다른 필드와 파일의 다른 설정은 건드리지 않는다. Paseo 데몬은 `config.json`을 핫리로드하지 않는다: `sync`로 바꾼 뒤에는 Paseo 데몬(또는 앱)을 재시작하고 `list_profiles`로 확인한다. 재시작 전에 앱 UI에서 프로필을 저장하면 이 변경을 덮어쓸 수 있는지는 미확인이다.
+
+### 6.1 `paseo_profiles` 스키마
+
+프로필 id(소문자·숫자·`-`)마다 다음 키를 둘 수 있다(그 밖의 키는 로더가 거부한다).
+
+| 키 | 의미 |
+|---|---|
+| 선택자 `role` \| `level` \| `task_types` | 최대 하나. `role`은 `roles.<이름>.paseo`, `level`은 `levels.<n>.paseo`에서 값을 가져온다. `task_types`는 `expect`가 필수다 |
+| `expect` | `[alias, effort]`(effort는 null 가능). 선택자의 후보(호스트 기본·`paseo_alternatives`·`lateral`·그 유형의 `orca_task_routes` 항목) 중 하나여야 한다 |
+| `description` | 프로필 `notes`가 된다 |
+| `provisional` | true면 라우터가 이름으로 안내하지 않고, `sync`는 `--include-provisional`일 때만 만든다. 없어도 드리프트가 아니다 |
+| `mode_id` | modeId 직접 지정 |
+
+선택자가 없는 프로필은 `provisional: true`이고 `expect`가 있어야 한다. 오케스트레이터 역할의 프로필은 `hosts.paseo.orchestrator_tools`(Claude) 도구만 쓴다. JSON의 중복 키는 거부된다. 위반은 모두 `routing_config_invalid`다. 파생 함수 `paseo_profile_spec(config, id)`가 돌려주는 값은 `provider`(모델의 도구), `model`(항상 정책의 정확한 id, 별칭 아님), `modeId`(`mode_id`, 없으면 그 프로필의 모든 `task_types`가 `review_mode.task_types`일 때 `review_mode[도구].modeId`, 아니면 `hosts.paseo.default_mode_id`), `thinkingOptionId`(effort, null이면 필드를 쓰지 않음), `notes`, `provisional`이다.
+
+임시 프로필: `scout`(haiku, effort 없음, `plan` 모드, 파일·심볼 정찰), `ui-verify`(Terra high), `l5-alt-astra`(Astra high, LEVEL 5 대체 — LEVEL 4 실패 계열이 Claude일 때). 모두 실제 프로필이 아직 없고 Sol을 기본으로 쓰는 프로필은 없다.
+
+### 6.2 `check` (읽기 전용)
+
+`python3 -B -m ai_policy.paseo check [--config <config.json>] [--policy <model-routing.json>] [--model-catalog <models_cache.json>] [--paseo-models <list_models.json>]`
+
+종료 코드 0 = 드리프트 없음, 1 = 드리프트(관리 프로필의 `provider`/`model`/`modeId`/`thinkingOptionId` 불일치, 비임시 프로필 누락, 같은 id 중복), 2 = 입력 오류(`{"schema":1,"error":"<코드>"}`). `notes_differ`, 임시 프로필 누락(`missing_provisional`), `unmanaged_profiles`, Codex의 `newer_generation_available:<id>`·`catalog_stale_or_missing`, Claude의 `newer_alias_observed`·`--paseo-models`가 주는 `newer_available`은 정보일 뿐 종료 코드에 영향이 없다. 기본 `--config`는 `~/.paseo/config.json`이다. 파일을 쓰지 않고 Paseo를 호출하지 않는다.
+
+### 6.3 `sync`와 `--restore`
+
+`python3 -B -m ai_policy.paseo sync [--config ...] [--policy ...] [--model-catalog ...] [--state-dir <dir>] [--include-provisional] [--overwrite ID[,ID]] [--plan-sha256 <해시>]`
+
+1. **드라이런이 기본이다.** 계획 JSON(`profiles[id].action`, `changes`, `conflicts`, `refusals`, `plan_sha256`)만 출력하고 아무것도 쓰지 않는다. action은 `noop`·`create`·`update`·`conflict`·`refused:pinned_fallback`·`refused:downgrade`·`skip_provisional`이다.
+2. **적용은 `--plan-sha256 <드라이런이 출력한 해시>`를 줄 때만.** 해시는 설정 파일 내용·플래그·카탈로그에 따라 바뀌며 하나라도 다르면 `plan_sha256_mismatch`로 거부한다. 쓰기 직전에 대상 파일의 sha256을 다시 확인하고(다르면 `config_changed`) 임시 파일 + `os.replace`로 원자적으로 교체하며, 쓴 뒤 다시 읽어 검증한다(`post_write_verification_failed`). 적용 결과는 `daemon_reload_required: true`와 데몬 재시작 안내를 포함한다.
+3. **형식 드리프트 방지.** 파일이 `json.dumps(indent=2, ensure_ascii=False)` + 개행과 바이트 단위로 같지 않으면 쓸 변경이 있을 때 `config_format_drift`로 거부한다(변경이 없으면 오류가 아니다).
+4. **백업과 상태.** 적용 전에 원본 바이트를 `<state-dir>/backups/config.<UTC시각>.<sha8>.json`(파일 0600, 디렉터리 0700)에 복사한다. 내용은 출력하지 않는다. 마지막 적용값은 `<state-dir>/state.json`에 기록한다. 기본 `--state-dir`는 `<저장소>/.local-artifacts/paseo-sync`(로컬 작업 기록 영역, 커밋하지 않는다)이다. 상태·백업 디렉터리가 심볼릭 링크이거나 소유자·권한이 맞지 않으면 거부한다.
+5. **충돌.** 기존 프로필의 관리 필드 값이 정책 값과 다르고, 그 현재 값이 `sync`가 마지막으로 적용한 값(상태 기록)과도 다르면(사람이 고친 것으로 본다. 기록이 없으면 항상 해당) `conflict`이며 건드리지 않는다. 종료 코드 1. `--overwrite ID[,ID]`로 지정한 관리 프로필은 덮어쓴다(`overwritten: true`). 충돌은 다른 프로필의 적용을 막지 않는다.
+6. **거부(`--overwrite`로 해제 불가).** Codex 모델 id는 카탈로그가 오래됐거나 없어 `pinned_fallback`이면 바꾸지 않고(`refused:pinned_fallback`), 어떤 모델도 낮은 세대로 되돌리지 않는다(`refused:downgrade`: 낮은 `gpt-N` 세대, 같은 계열의 낮은 Claude 버전). 종료 코드 1.
+7. **쓰는 범위.** 기존 프로필은 `provider`·`model`·`modeId`·`thinkingOptionId`만 갱신한다(`notes`·`name`·`features`·`options`·다른 프로필은 그대로). 없는 프로필은 `id`·`name`(=id)·관리 필드·`options: null`·`notes`로 만든다. 임시 프로필은 `--include-provisional`일 때만 만든다.
+8. **복원.** `sync --restore <백업 경로>`도 드라이런이 기본이며 `--plan-sha256`으로 적용한다. 백업은 `<state-dir>/backups/` 바로 아래의 정규 파일·정해진 이름·내용 해시가 일치하는 것만 받고(경로 이탈·심볼릭 링크·비정규 파일 거부) 교체 전 현재 파일도 백업한다. `--include-provisional`·`--overwrite`와는 함께 쓰지 못한다.
+
+종료 코드: 0 = 성공(드라이런 포함), 1 = 충돌 또는 거부가 있음, 2 = 오류(`config_changed`, `plan_sha256_mismatch`, `config_format_drift`, `state_invalid`, `duplicate_profile_id`, `overwrite_unknown_id` 등).
