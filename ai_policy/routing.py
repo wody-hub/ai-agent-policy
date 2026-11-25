@@ -70,7 +70,7 @@ def load_config(path=None):
         for h, e2 in lateral.items():
             if h not in hosts: _bad()
             _pick(c, e2)
-            if c['models'][e2[0]]['tier'] in c['limits'].get('premium_tiers', ()): _bad()
+            if c['models'][e2[0]]['tier'] in c['limits'].get('premium_tiers', ()) or c['models'][e2[0]]['tool'] not in hosts[h]['tools']: _bad()
     _validate_paseo(c)
     _validate_cross_family_review(c)
     task_routes = c.get('orca_task_routes', {})
@@ -138,8 +138,10 @@ def _validate_paseo(c):
         if not isinstance(review, dict): _bad()
         for key in ('task_types','write_block_required_task_types'):
             if not isinstance(review.get(key, []), list) or any(t not in c['task_types'] for t in review.get(key, [])): _bad()
-        for tool in ('claude','codex'):
-            if tool in review and (not isinstance(review[tool], dict) or not isinstance(review[tool].get('modeId'), str)): _bad()
+        if not set(review.get('write_block_required_task_types', []))<=set(review.get('task_types', [])): _bad()
+        # Every tool the Paseo host can use needs a review mode; a missing entry would leave that reviewer unchecked.
+        for tool in set(paseo.get('tools', ()))|{t for t in ('claude','codex') if t in review}:
+            if tool not in review or not isinstance(review[tool], dict) or not isinstance(review[tool].get('modeId'), str) or not review[tool]['modeId']: _bad()
 
 def _profile_target(c, spec):
     """(alias, effort) a profile asks for: expect, else the selector's paseo entry. Validated specs only."""
@@ -243,6 +245,10 @@ def _paseo_review(config, task_type, tool):
     out=dict(rm[tool]); out['tool']=tool
     out['write_block_required']=task_type in rm.get('write_block_required_task_types', ())
     return out
+
+def _write_block_needed(config, task_type):
+    rm=config.get('review_mode')
+    return bool(rm) and task_type in rm.get('write_block_required_task_types', ())
 
 def _paseo_profile(config, role, level, task_type, effort, model_id, mode_id):
     """Managed, non-provisional profile whose derived start values equal the routed ones (model id, mode, thinking); otherwise None."""
@@ -397,8 +403,8 @@ def route(config, *, host, level=None, task_type=None, role=None, failures=0, fa
         # Paseo has no worker-start arguments; the start configuration is create_agent fields.
         out['orca_worker_args']=[]
         out.update(paseo_create_agent=None, paseo_profile=None, paseo_review=None)
-        wb=_paseo_review(config, task_type, 'claude')
-        if chosen is None and action=='blocked_no_independent_reviewer' and wb and wb['write_block_required'] \
+        needs_wb=_write_block_needed(config, task_type)   # fail closed: judged from the type list, not from a reviewer entry that might be missing
+        if chosen is None and action=='blocked_no_independent_reviewer' and needs_wb \
                 and not any(config['models'][a]['tool']=='claude' and _usable(config, host, a, available, _resolved_model(config['models'][a], model_catalog)[0], False) for a, _ in cands):
             # Independence failed and the write-block (Claude plan-mode reviewer) cannot be met either: record both reasons.
             reasons.append('review_write_block_requires_claude_plan')
@@ -406,7 +412,7 @@ def route(config, *, host, level=None, task_type=None, role=None, failures=0, fa
             a, e, model_id, _=chosen; tool=config['models'][a]['tool']
             review=_paseo_review(config, task_type, tool)
             out['paseo_review']=review
-            if review and review['write_block_required'] and tool=='codex':
+            if needs_wb and (tool!='claude' or review is None):
                 # A write-blocking review needs a Claude plan-mode reviewer; Codex plan_mode is not enforced. Block instead of returning a runnable config.
                 # With an implementer_family the same block is reported as the independence block; the Claude reviewer would also fail independence.
                 out['action']=action='blocked_no_independent_reviewer' if implementer_family is not None else 'blocked_no_available_model'

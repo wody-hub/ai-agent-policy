@@ -250,4 +250,41 @@ class PaseoProfileSpecTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as d:
             p=Path(d)/'c.json'; p.write_text(json.dumps(c)); routing.load_config(p)
 
+class LoaderHoleTests(unittest.TestCase):
+    base=json.loads(routing.DEFAULT_CONFIG.read_text())
+
+    def bad(self, mut):
+        c=json.loads(json.dumps(self.base)); mut(c)
+        with tempfile.TemporaryDirectory() as d:
+            p=Path(d)/'c.json'; p.write_text(json.dumps(c))
+            with self.assertRaises(PolicyError) as cm: routing.load_config(p)
+            self.assertEqual(str(cm.exception), 'routing_config_invalid')
+
+    def test_review_mode_write_block_types_must_be_review_types(self):
+        self.bad(lambda c: c['review_mode'].update(write_block_required_task_types=['security_review','docs']))
+        self.bad(lambda c: c['review_mode'].update(write_block_required_task_types='security_review'))
+        self.bad(lambda c: c['review_mode'].update(write_block_required_task_types=['nope']))
+
+    def test_review_mode_needs_a_mode_id_for_every_paseo_tool(self):
+        for tool in ('claude','codex'):
+            self.bad(lambda c: c['review_mode'].pop(tool))
+            self.bad(lambda c: c['review_mode'].update({tool: {'note':'no modeId'}}))
+        self.bad(lambda c: c['hosts']['paseo'].update(tools=['claude','codex','gemini']))
+
+    def test_lateral_entry_tool_must_be_a_tool_of_that_host(self):
+        self.bad(lambda c: c['levels']['2']['lateral'].update(claude=['terra','high']))    # Codex model on the claude-only host
+        self.bad(lambda c: c['levels']['2']['lateral'].update(codex=['sonnet','high']))    # Claude model on the codex-only host
+
+    def test_runtime_stays_fail_closed_when_a_review_mode_tool_entry_is_missing(self):
+        # a hand-built config without load_config validation: a missing entry means blocked, never unblocked
+        for missing, avail in (('codex', ['luna']), ('claude', None), ('claude', ['sonnet'])):
+            c=json.loads(json.dumps(self.base)); c['review_mode'].pop(missing)
+            x=routing.route(c, host='paseo', task_type='security_review', available=avail)
+            self.assertEqual(x['action'], 'blocked_no_available_model', (missing, avail))
+            self.assertIsNone(x['paseo_create_agent']); self.assertIn('review_write_block_requires_claude_plan', x['reasons'])
+        c=json.loads(json.dumps(self.base)); c['review_mode'].pop('claude')
+        x=routing.route(c, host='paseo', task_type='security_review', implementer_family='codex')
+        self.assertEqual((x['action'], x['paseo_create_agent']), ('blocked_no_independent_reviewer', None))
+        self.assertEqual(routing.route(c, host='paseo', task_type='docs')['action'], 'run')       # other types are unaffected
+
 if __name__=='__main__': unittest.main()
