@@ -241,6 +241,24 @@ class SyncApplyTests(unittest.TestCase):
         with mock.patch.object(paseo, '_read_bytes', side_effect=flaky): code, out=e.run(plan=h)
         self.assertEqual((code, out['error']), (2, 'post_write_verification_failed'))
         self.assertEqual(json.loads((e.state/'state.json').read_text())['profiles'], {'l4-critical':{'modeId':'plan'}})
+        # the config WAS replaced: the error says so and names the backup to restore from
+        self.assertEqual((out['applied'], out['state_saved'], out['daemon_reload_required']), (True, False, True))
+        self.assertEqual(Path(out['backup']).read_bytes(), self.orig); self.assertIn('restart', out['note'].lower())
+        self.assertNotEqual(e.cfg.read_bytes(), self.orig)
+
+    def test_state_save_failure_after_replace_is_structured_and_exits_nonzero(self):
+        e=self.e; h=e.dry()[1]['plan_sha256']
+        with mock.patch.object(paseo, '_save_state', side_effect=OSError('disk full')): code, out=e.run(plan=h)
+        self.assertEqual((code, out['error'], out['applied'], out['state_saved']), (2, 'state_save_failed', True, False))
+        self.assertEqual(Path(out['backup']).read_bytes(), self.orig); self.assertEqual(out['plan_sha256'], h)
+        self.assertEqual(json.loads(e.cfg.read_text())['daemon']['agentProfiles'][-1]['id'], 'lookup')   # the new config is in place
+        self.assertEqual(json.loads((e.state/'state.json').read_text())['profiles'], {'l4-critical':{'modeId':'plan'}})   # old state intact
+        self.assertEqual([x.name for x in e.d.iterdir() if x.name.endswith('.tmp')], [])
+
+    def test_errors_before_the_replace_stay_plain_errors(self):
+        e=self.e; h=e.dry()[1]['plan_sha256']
+        with mock.patch.object(paseo, '_before_replace', side_effect=lambda *a, **k: e.cfg.write_text('{"x":1}\n')): code, out=e.run(plan=h)
+        self.assertEqual(out, {'schema':1,'error':'config_changed'})
 
 class SyncRuleTests(unittest.TestCase):
     def test_hand_edited_profile_is_conflict_and_overwrite_writes_it(self):
@@ -395,6 +413,15 @@ class RestoreTests(unittest.TestCase):
             code, out=self.rest(self.backup, h)
         self.assertEqual((code, out['error']), (2, 'config_changed')); self.assertEqual(e.cfg.read_text(), '{"x":1}\n')
         self.assertEqual([x.name for x in e.d.iterdir() if x.name.endswith('.tmp')], [])
+
+    def test_restore_post_replace_verification_failure_is_structured(self):
+        e=self.e; h=self.rest(self.backup)[1]['plan_sha256']; real=paseo._read_bytes; calls=[]
+        def flaky(path):
+            data=real(path); calls.append(1)
+            return data+b' ' if len(calls)>=3 else data
+        with mock.patch.object(paseo, '_read_bytes', side_effect=flaky): code, out=self.rest(self.backup, h)
+        self.assertEqual((code, out['error'], out['applied']), (2, 'post_write_verification_failed', True))
+        self.assertTrue(Path(out['pre_restore_backup']).exists()); self.assertEqual(e.cfg.read_bytes(), self.orig)
 
     def test_refuses_outside_symlink_non_regular_and_bad_names(self):
         e=self.e; before=e.snap()

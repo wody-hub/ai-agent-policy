@@ -319,6 +319,10 @@ def _result(body, plan_sha256, applied, **extra):
     if applied: out['note']=RELOAD_NOTE
     return out
 
+def _is_replaced(path, new_bytes):
+    try: return _read_bytes(path)==new_bytes
+    except PolicyError: return False
+
 def run_sync(a):
     config=load_config(a.policy); catalog=load_codex_model_catalog(a.model_catalog)
     overwrite={x for chunk in (a.overwrite or []) for x in chunk.split(',') if x}
@@ -335,15 +339,26 @@ def run_sync(a):
         return _result(body, plan['plan_sha256'], False, dry_run=False, state_saved=True), code
     mode=stat.S_IMODE(os.stat(a.config).st_mode)
     backup=_backup(_state_dir(a), raw)
-    _write_atomic(a.config, plan['new_bytes'], digest(raw), mode)
-    after=_read_bytes(a.config)
-    try: _, now=_parse(after)
-    except PolicyError: now=[]
-    got={x['id']:x for x in now}
-    if after!=plan['new_bytes'] or any(got.get(pid, {}).get(f, KeyError)!=v for pid, want in plan['writes'].items() for f, v in want.items()):
-        raise PolicyError('post_write_verification_failed')
-    state=_load_state(_state_dir(a), a.config); state.update(plan['record'])
-    _save_state(_state_dir(a), state, digest(after), a.config)
+    try: _write_atomic(a.config, plan['new_bytes'], digest(raw), mode)
+    except (PolicyError, OSError):
+        if not _is_replaced(a.config, plan['new_bytes']): raise     # failed before the replace: a plain error, nothing changed
+        raise_after=True
+    else: raise_after=False
+    # From here on the config file has been replaced: any failure is reported with that fact, the backup and the state status.
+    try:
+        if raise_after: raise PolicyError('post_write_verification_failed')
+        after=_read_bytes(a.config)
+        try: _, now=_parse(after)
+        except PolicyError: now=[]
+        got={x['id']:x for x in now}
+        if after!=plan['new_bytes'] or any(got.get(pid, {}).get(f, KeyError)!=v for pid, want in plan['writes'].items() for f, v in want.items()):
+            raise PolicyError('post_write_verification_failed')
+        state=_load_state(_state_dir(a), a.config); state.update(plan['record'])
+        try: _save_state(_state_dir(a), state, digest(after), a.config)
+        except OSError: raise PolicyError('state_save_failed')
+    except (PolicyError, OSError) as e:
+        return _result(body, plan['plan_sha256'], True, dry_run=False, backup=str(backup), state_saved=False,
+                       error=str(e) if isinstance(e, PolicyError) else 'filesystem_error'), 2
     return _result(body, plan['plan_sha256'], True, dry_run=False, backup=str(backup), state_saved=True), code
 
 # ---- restore -----------------------------------------------------------------------------------------------------------------------------
@@ -380,8 +395,13 @@ def run_restore(a):
     if raw==braw: return _result(body, plan['plan_sha256'], False, dry_run=False), 0
     mode=stat.S_IMODE(os.stat(a.config).st_mode)
     pre=_backup(_state_dir(a), raw)   # the file being replaced stays recoverable
-    _write_atomic(a.config, braw, digest(raw), mode)
-    if _read_bytes(a.config)!=braw: raise PolicyError('post_write_verification_failed')
+    try: _write_atomic(a.config, braw, digest(raw), mode)
+    except (PolicyError, OSError):
+        if not _is_replaced(a.config, braw): raise
+    try:
+        if _read_bytes(a.config)!=braw: raise PolicyError('post_write_verification_failed')
+    except PolicyError as e:
+        return _result(body, plan['plan_sha256'], True, dry_run=False, pre_restore_backup=str(pre), error=str(e)), 2
     return _result(body, plan['plan_sha256'], True, dry_run=False, pre_restore_backup=str(pre)), 0
 
 def main(argv=None):
