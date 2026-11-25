@@ -26,6 +26,10 @@ def default_state_dir(config_path):
 def _state_dir(a): return a.state_dir if a.state_dir is not None else default_state_dir(a.config)
 ALIAS_NOTE='claude ids are pinned exact ids; whether an alias now resolves elsewhere needs a live Paseo list_models check (not done offline)'
 
+def _codex_family(model_id):
+    m=re.fullmatch(r'gpt-\d+(?:\.\d+)*-([a-z0-9]+)', model_id or '')
+    return m.group(1) if m else None
+
 def _generation(model_id):
     m=re.fullmatch(r'gpt-(\d+(?:\.\d+)*)-[a-z0-9]+', model_id or '')
     return tuple(int(x) for x in m.group(1).split('.')) if m else None
@@ -242,8 +246,9 @@ def _refusal(config, alias, current_model, desired_model, model_catalog):
     if config['models'][alias]['tool']=='codex':
         family=config['models'][alias]['codex_family']
         if resolve_codex_family(config, family, model_catalog=model_catalog)['model_resolution']=='pinned_fallback': return 'pinned_fallback'
+        # Generations are only comparable within one family (Terra 6.1 -> Luna 6 or Sol 6.2 -> Terra 6.1 is a family change, not a downgrade).
         a, b=_generation(desired_model), _generation(current_model)
-        return 'downgrade' if a and b and a<b else None
+        return 'downgrade' if a and b and _codex_family(desired_model)==_codex_family(current_model) and a<b else None
     a, b=_claude_version(desired_model), _claude_version(current_model)
     return 'downgrade' if a and b and a[0]==b[0] and a[1]<b[1] else None
 

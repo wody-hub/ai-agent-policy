@@ -249,6 +249,19 @@ class SyncRuleTests(unittest.TestCase):
         new=e.loaded(); self.assertEqual((profile(new,'dev-l1-simple')['model'], profile(new,'l5-last-resort')['model'], profile(new,'l4-critical')['model']),
                                          ('gpt-7-luna','claude-fable-5-2','claude-opus-5-5'))
 
+    def test_cross_family_codex_change_is_not_a_downgrade_but_same_family_is(self):
+        for pid, current, want in (('dev-l1-simple','gpt-6.1-terra','gpt-6-luna'), ('review-claude-work','gpt-6.2-sol','gpt-6.1-terra')):
+            e=Env(self, live_like(edited(pid, model=current)), catalog=FRESH_CATALOG()); e.seed({pid:{'model':current}})
+            code, out=e.apply()
+            self.assertEqual((code, out['profiles'][pid]['action'], out['refusals']), (0, 'update', []), pid)
+            self.assertEqual(profile(e.loaded(), pid)['model'], want)
+            e=Env(self, live_like(edited(pid, model=current)), catalog=FRESH_CATALOG())      # a hand edit: conflict, but --overwrite may fix it
+            self.assertEqual(e.dry()[1]['profiles'][pid]['action'], 'conflict')
+            code, out=e.apply('--overwrite', pid); self.assertEqual((code, out['profiles'][pid]['action']), (0, 'update'))
+        # same family, lower generation stays refused and cannot be overridden
+        e=Env(self, live_like(edited('review-claude-work', model='gpt-7-terra')), catalog=FRESH_CATALOG()); e.seed({'review-claude-work':{'model':'gpt-7-terra'}})
+        code, out=e.apply('--overwrite','review-claude-work'); self.assertEqual((code, out['profiles']['review-claude-work']['action']), (1, 'refused:downgrade'))
+
     def test_codex_change_with_fresh_catalog_is_written_to_pinned_id_only(self):
         e=Env(self, live_like(edited('dev-l1-simple', model='gpt-5-luna')), catalog=FRESH_CATALOG()); e.seed({'dev-l1-simple':{'model':'gpt-5-luna'}})
         code, out=e.apply(); self.assertEqual((code, out['changes']), (0, 1)); self.assertEqual(profile(e.loaded(),'dev-l1-simple')['model'], 'gpt-6-luna')
