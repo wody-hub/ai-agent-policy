@@ -123,7 +123,7 @@ class RoutingTests(unittest.TestCase):
 
     def test_worker_args(self):
         self.assertEqual(r(host='orca', task_type='docs')['orca_worker_args'], ['--agent','codex','--model','gpt-6-luna','--effort','medium'])
-        self.assertEqual(r(host='claude', role='lookup')['orca_worker_args'], ['--agent','claude','--model','claude-haiku-4-5-20251001'])
+        self.assertEqual(r(host='claude', role='lookup')['orca_worker_args'], ['--agent','claude','--model','claude-haiku-5-5'])
 
     def test_codex_family_uses_newest_supported_cached_generation(self):
         catalog=[
@@ -208,7 +208,7 @@ class RoutingTests(unittest.TestCase):
                 self.assertEqual(str(cm.exception), 'routing_config_invalid')
         bad(lambda c: c['levels']['1'].update(orca=['luna','ultra']))
         bad(lambda c: c['levels']['1'].update(orca=['ghost','low']))
-        bad(lambda c: c['roles']['lookup'].update(claude=['haiku','high']))
+        bad(lambda c: c['roles']['lookup'].update(claude=['haiku','ultra']))
         bad(lambda c: c['models']['luna'].update(codex_family='../luna'))
         bad(lambda c: c.pop('fallbacks'))
         bad(lambda c: c.update(schema=2))
