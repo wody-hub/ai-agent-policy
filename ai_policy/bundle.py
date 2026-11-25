@@ -54,10 +54,17 @@ class Bundle:
     manifest: dict
     files: dict
     sha256: str
+    flavor: str='orca'
 
-REQUIRED={'policy/orca-common.md','policy/adapters/codex.md','policy/adapters/claude.md',
-          'ai_policy/__init__.py','ai_policy/__main__.py','ai_policy/bundle.py',
-          'ai_policy/context.py','ai_policy/install.py'}
+CODE={'ai_policy/__init__.py','ai_policy/__main__.py','ai_policy/bundle.py',
+      'ai_policy/context.py','ai_policy/install.py'}
+# Orca is the original bundle; a manifest without a "flavor" key is an Orca manifest (unchanged format).
+REQUIRED={'policy/orca-common.md','policy/adapters/codex.md','policy/adapters/claude.md',*CODE}
+# Paseo bundle: its own common body, its own adapters, the same offline code. A separate install root and markers
+# (see install.py) let both flavors coexist in one home.
+PASEO_REQUIRED={'policy/paseo-common.md','policy/adapters/paseo-codex.md','policy/adapters/paseo-claude.md',*CODE}
+FLAVORS={'orca':{'required':REQUIRED,'common':'policy/orca-common.md','adapter':'policy/adapters/{host}.md'},
+         'paseo':{'required':PASEO_REQUIRED,'common':'policy/paseo-common.md','adapter':'policy/adapters/paseo-{host}.md'}}
 
 def load_bundle(manifest_path):
     p=Path(manifest_path)
@@ -70,8 +77,10 @@ def load_bundle(manifest_path):
     sources=m.get('source_hashes')
     if not isinstance(sources,dict) or len(sources)!=5 or any(not re.fullmatch('[0-9a-f]{64}',str(v)) for v in sources.values()):
         raise PolicyError('source_provenance')
+    flavor=m.get('flavor','orca')
+    if flavor not in FLAVORS or ('flavor' in m and flavor=='orca'): raise PolicyError('manifest_schema')
     hashes=m.get('files')
-    if not isinstance(hashes,dict) or set(hashes)!=REQUIRED: raise PolicyError('manifest_files')
+    if not isinstance(hashes,dict) or set(hashes)!=FLAVORS[flavor]['required']: raise PolicyError('manifest_files')
     files={}
     for name,h in hashes.items():
         relative(name)
@@ -79,10 +88,11 @@ def load_bundle(manifest_path):
         data=read_regular(p.parent.parent/name)
         if digest(data)!=h: raise PolicyError('bundle_drift')
         files[name]=data
-    return Bundle(m,files,digest(raw))
+    return Bundle(m,files,digest(raw),flavor)
 
 def adapter(bundle, host, home):
     if host not in ('codex','claude'): raise PolicyError('unsupported_host')
     # JSON quoting makes the displayed path unambiguous; it is guidance, never shell.
-    fixed=str(Path(home)/'.config/ai-agent-policy/orca/entrypoint.py')
-    return bundle.files['policy/adapters/'+host+'.md'].replace(b'{{ENTRYPOINT}}',json.dumps(fixed,ensure_ascii=False).encode())
+    fixed=str(Path(home)/'.config/ai-agent-policy'/bundle.flavor/'entrypoint.py')
+    name=FLAVORS[bundle.flavor]['adapter'].format(host=host)
+    return bundle.files[name].replace(b'{{ENTRYPOINT}}',json.dumps(fixed,ensure_ascii=False).encode())

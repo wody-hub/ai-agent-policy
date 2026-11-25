@@ -1,24 +1,24 @@
 {
   "files": {
     "ai_policy/__init__.py": "8d44e6f90a78f4aed478c3f744f1c37f89820a2a811f74638b89172efcd6120b",
-    "ai_policy/__main__.py": "6dd466185e86bb9f474009baf6c90d70a8d04f27b86c135040d0dabe5625b7cb",
-    "ai_policy/bundle.py": "bc61c9344c465d2136d6a2bb86e3a1edde06b6f1b805c01b50d41eada3d1b571",
-    "ai_policy/context.py": "a60c86aa95d6e1d7b968f76fca9726c39dd9b9a7d063331ae47b079bd374f7a6",
-    "ai_policy/install.py": "d90afd16f67ae2cc359bdea1c38c4abeafbadf6a41cb67d0bad558bd7e6eec9d",
+    "ai_policy/__main__.py": "2d33a88eea2a5cc18299bae5b39912dff78dbea922bc191ec30dd39379bc31b4",
+    "ai_policy/bundle.py": "785cca03d25db7c71fe209eb3e0f0dac54b32d9aae27b1eb198b61e59cad67ee",
+    "ai_policy/context.py": "fd82edd94c1d6232ec442d9f8410e94674e99fc53bcd7a79d50778c958842dc6",
+    "ai_policy/install.py": "8d52707c41d09814a15927df6303519cf592dbada66fddcabdfcfc956e00e7f4",
     "policy/adapters/claude.md": "27600dd29e5a6667a6de48d2f7dcb792b5ab0d9a9a94aace71ce53c5c8bc1f9c",
     "policy/adapters/codex.md": "27600dd29e5a6667a6de48d2f7dcb792b5ab0d9a9a94aace71ce53c5c8bc1f9c",
-    "policy/orca-common.md": "545f8710d3fc62dbace3f9972bdf3ba07459a62f2ae8268bfd52a55b1499ba86"
+    "policy/orca-common.md": "bf7ad85efdefa5181d670c42cce3cb048259d42df85a7967e42a1f5f969598ed"
   },
   "installer_schema": 1,
-  "installer_version": "0.1.0",
+  "installer_version": "0.2.0",
   "schema": 1,
-  "source_commit": "8c147760a6dd47a0bc94e9b1261c34a3f5b6ab0f",
+  "source_commit": "1676f9f201bd4f017017051b8cfe52434109d765",
   "source_hashes": {
-    "README.md": "6131c81d0988b3b6fd52781ec06e5c06525ce24f8cc2013a5c2b43035367f7d0",
-    "claude-code-global-model-routing-prompt.md": "e9727449c8ed887f6d63c72534f76daabf10e12099e1f1861d817af32ee6ed2e",
-    "codex-global-model-routing-prompt.md": "36e9033d5abf1d067228bbda9f55347ea7ea5e4af70e62a6c9e3b65bf32df76c",
-    "orca-project-setup.md": "3f9439441126cceed1b391afa8c05f0a90f91e4ff2199be63bcae86a82e7bb8e",
-    "project-task-policy-setup.md": "fbd11dc9c6007fd9c09cc92aab100004793e411e7739b5e142692e14e2cbe165"
+    "README.md": "8901d47be21a17622f77aa82830040e0bbd69437baeff88064438ad0a47832d2",
+    "claude-code-global-model-routing-prompt.md": "e8d93e181083b0a553659940a2507742f602a05ee193e34dc7725a2f28346f44",
+    "codex-global-model-routing-prompt.md": "6ec0effeef13967670623dc5a5bd686176ebc1dd98be9250cec364f94d03cd7c",
+    "orca-project-setup.md": "02614ec3b4b97b88c51fc27f4ab152cd2806c5dfbe0ad51388ce1349b52a79d3",
+    "project-task-policy-setup.md": "8f4bb5c98f90b5b9a45727e8c0899b5e8cf005530327b1a181f19ee524c43f0c"
   },
-  "version": "0.2.1"
+  "version": "0.2.2"
 }

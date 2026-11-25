@@ -3,6 +3,12 @@
 The installed runtime never uses PATH to locate Orca. This reviewed candidate is
 specific to the current Mac layout; another layout is unsupported until reviewed.
 No currently supported query attests the calling invocation.
+
+Paseo context evidence (decide_paseo) runs in parallel with the Orca path below and
+leaves it untouched. Paseo evidence is the parent's assignment message and the
+agent's own parent label (paseo.parent-agent-id); an environment variable alone is
+never evidence. A subprocess cannot read either fact, so this module defines the
+decision only; collect_paseo_runtime never produces an active decision by itself.
 """
 from dataclasses import dataclass
 import json
@@ -156,3 +162,44 @@ def collect_runtime(cwd, hints, runner=bounded_query, *, orca=SELECTED_ORCA):
         return Evidence(**base,error=str(e))
     except (OSError,ValueError,TypeError,KeyError):
         return Evidence(**base,error='runtime_unavailable')
+
+
+# ---- Paseo managed-context evidence (parallel to the Orca path above; no Orca behavior changed) ----
+
+PASEO_ALLOWLIST=('PASEO_AGENT_ID',)
+
+@dataclass(frozen=True)
+class PaseoEvidence:
+    """Facts a host integration may attest. None means not checked; only True counts as evidence."""
+    hints_present: bool=False            # environment hint such as PASEO_AGENT_ID: never evidence on its own
+    assignment_message: bool | None=None # parent's assignment message with Task ID, workspace, role and done condition
+    parent_label: bool | None=None       # the agent's own runtime record carries paseo.parent-agent-id
+    workspace_match: bool | None=None    # assigned workspace equals the actual working location
+    error: str | None=None
+
+def paseo_hints(env):
+    """Presence only; values are neither read into the decision nor reported."""
+    return {k:True for k in PASEO_ALLOWLIST if env.get(k)}
+
+def decide_paseo(evidence, bundle_valid, bundle_sha256=None):
+    e=evidence
+    decision,reason='ambiguous','origin_unverified'
+    claimed=e.assignment_message is True or e.parent_label is True
+    if e.error: reason=e.error
+    elif not e.hints_present and not claimed: decision,reason='inactive','not_managed'
+    elif not bundle_valid: reason='bundle_invalid'
+    elif e.workspace_match is False: reason='workspace_mismatch'
+    elif e.assignment_message is True and e.parent_label is True:
+        decision,reason='active','verified'
+    elif e.assignment_message is True: reason='parent_label_missing'
+    elif e.parent_label is True: reason='assignment_message_missing'
+    return {'schema':1,'flavor':'paseo','decision':decision,'reason':reason,
+            'checks':{'assignment_message':e.assignment_message,'parent_label':e.parent_label,
+                      'workspace_match':e.workspace_match},
+            'provenance':{'bundle_sha256':bundle_sha256},'policy_emitted':decision=='active'}
+
+def collect_paseo_runtime(env):
+    """Subprocess view: only the environment hint is observable. Neither the parent's assignment message nor the
+    agent's parent label can be read here, so the result can never be active. A host integration that reads the
+    agent's own runtime record builds PaseoEvidence itself and calls decide_paseo."""
+    return PaseoEvidence(hints_present=bool(paseo_hints(env)))
