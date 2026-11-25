@@ -40,7 +40,7 @@
 
 | 입력 | 값 | 효과 |
 |---|---|---|
-| `--failed-family` | `claude` / `codex` / `both` (쉼표 구분) | LEVEL 4에서 실패한 계열. 하나만 지정하면 LEVEL 5 후보 중 반대 계열을 우선한다(`l5_opposite_family:<alias>`). `both`면 호스트 기본 후보를 유지한다. 그 밖의 값은 `unknown_failed_family`. |
+| `--failed-family` | `claude` / `codex` / `both` (쉼표 구분) | LEVEL 4에서 실패한 계열(순서는 무시, 두 계열이면 `both`와 같다). 하나만 지정하면 LEVEL 5 후보 중 반대 계열을 우선한다(`l5_opposite_family:<alias>`). `both`면 호스트 기본 후보를 유지한다. 그 밖의 값은 `unknown_failed_family`. |
 | `--failed-model` | 별칭 또는 id (쉼표 구분) | LEVEL 4에서 이미 실패한 모델을 후보에서 제외한다(`excluded_failed_model:<alias>`). 남는 후보가 없으면 `blocked_no_available_model`. |
 | `--implementer-family` | `claude` / `codex` | 교차 계열 리뷰 유형(`cross_family_review.task_types`)에서 리뷰어를 구현자와 다른 계열로 고른다. 그 밖의 값은 `unknown_implementer_family`. |
 
@@ -54,7 +54,7 @@
 
 ## LEVEL 2 수평 단계와 시도 횟수
 
-레벨당 계수 대상 실패는 2회까지 시도한다(`reasoning_failures_before_escalation`=2). LEVEL 2에서 실패가 1회 쌓이면 두 번째이자 마지막 시도는 `levels.2.lateral`의 표준 등급 모델(Terra high)로 보낸다. 이 단계는 대체 후보를 쓰지 않으며 premium 모델은 허용하지 않는다. Terra를 쓸 수 없으면 `lateral_unavailable:terra`와 함께 LEVEL 3으로 올린다. 실패 2회가 되면 LEVEL 3으로 승격한다. 따라서 LEVEL 2 시도는 2회, LEVEL 1에서 시작하면 LEVEL 4 전까지 최대 6회(레벨당 2회)다. 수평 단계는 레벨 기준 선택(`--level`/유형)에만 적용되고 역할(`--role`)에는 적용되지 않는다. 환경·권한 등 비모델 실패는 승격하지 않는다. 이 단계는 모델 라우팅 1.7.0부터 Orca·codex·paseo 호스트 출력을 바꾼다(1.5.0·1.6.0에서는 같은 모델을 한 번 더 시도했다). Claude 호스트에는 수평 항목이 없어 그대로다.
+레벨당 계수 대상 실패는 2회까지 시도한다(`reasoning_failures_before_escalation`=2). LEVEL 2에서 실패가 1회 쌓이면 두 번째이자 마지막 시도는 `levels.2.lateral`의 표준 등급 모델(Terra high)로 보낸다. 이 단계는 대체 후보를 쓰지 않으며 premium 모델은 허용하지 않는다. Terra를 쓸 수 없으면 `lateral_unavailable:terra`와 함께 LEVEL 3으로 올린다. 실패 2회가 되면 LEVEL 3으로 승격한다. 따라서 LEVEL 2 시도는 2회, LEVEL 1에서 시작하면 LEVEL 4 전까지 최대 6회(레벨당 2회)다. 수평 단계는 레벨 기준 선택(`--level`/유형)에만 적용되고 역할(`--role`)에는 적용되지 않는다. 첫 시도가 실제로 쓴 모델(작업 유형 경로의 첫 항목, 없으면 레벨 값)과 같은 도구일 때만 적용하며 교차 계열 리뷰 유형(`cross_family_review.task_types`)에는 적용하지 않는다(그 경우 같은 경로를 다시 쓴다). 환경·권한 등 비모델 실패는 승격하지 않는다. 이 단계는 모델 라우팅 1.7.0부터 Orca·codex·paseo 호스트 출력을 바꾼다(1.5.0·1.6.0에서는 같은 모델을 한 번 더 시도했다). Claude 호스트에는 수평 항목이 없어 그대로다.
 
 ## LEVEL 5 반대 계열 규칙
 

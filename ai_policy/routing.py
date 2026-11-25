@@ -436,7 +436,7 @@ def main(argv=None):
     p.add_argument('--task-type'); p.add_argument('--level', type=int); p.add_argument('--role')
     p.add_argument('--failures', type=int, default=0); p.add_argument('--failure-kind')
     p.add_argument('--available'); p.add_argument('--resolved', action='store_true')
-    p.add_argument('--failed-family', help='Comma-separated families (claude, codex, both) that failed at LEVEL 4, most recent last')
+    p.add_argument('--failed-family', help='Comma-separated families (claude, codex, both) that failed at LEVEL 4; order is ignored: exactly one family prefers the opposite family at LEVEL 5, two families or both keep the host default')
     p.add_argument('--failed-model', help='Comma-separated aliases or ids that already failed on this root problem')
     p.add_argument('--implementer-family', help='claude or codex: reviewer must be the other family')
     p.add_argument('--model-catalog', help='Codex model cache JSON; defaults to CODEX_HOME/models_cache.json')
