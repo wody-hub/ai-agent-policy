@@ -1,8 +1,10 @@
 # Paseo agent lifecycle (draft 0.1.0)
 
-상태: 초안(2026-11-25). [Orca Worker lifecycle rulebook](orca-worker-lifecycle.md)에 대응하는 Paseo용 규칙이다. 승인 전에는 Orca 문서를 대체하지 않는다. 공통 원칙은 [paseo-common](../policy/paseo-common.md)을 따른다.
+상태: 초안(2026-11-25, 같은 날 사용자 확정 결정 반영). [Orca Worker lifecycle rulebook](orca-worker-lifecycle.md)에 대응하는 Paseo용 규칙이다. 승인 전에는 Orca 문서를 대체하지 않는다. 퇴역은 병행기 후다: 기존 Orca가 소유한 진행 중 Run·worktree만 Orca 규칙으로 마무리하고 새 Task는 즉시 이 문서를 따르며, 모든 Orca Run 정산·release 확인 뒤 Orca 문서를 «보관» 표시한다([migration design](paseo-migration-design.md) 5절 Q1). 공통 원칙은 [paseo-common](../policy/paseo-common.md)을 따른다.
 
-근거 표기: [DOC]/[SRC]/[GH]는 `.local-artifacts/paseo-migration/evidence/paseo-technical-research.md`(Paseo v0.17.4, 소스 commit 8b2e14f, 2026-11-24)의 표기를 따른다. [MCP]는 2026-11-25 이 세션에서 읽은 Paseo MCP 도구 스키마다. [미확인]은 실행으로 검증하지 않은 항목이다.
+근거 표기: [DOC]/[SRC]/[GH]는 `.local-artifacts/paseo-migration/evidence/paseo-technical-research.md`(Paseo v0.17.4, 소스 commit 8b2e14f, 2026-11-24)의 표기를 따른다. [MCP]는 2026-11-25 이 세션에서 읽은 Paseo MCP 도구 스키마다. [미확인]은 실행으로 검증하지 않은 항목이다. [관측]은 2026-11-25 이 세션의 설정 파일 읽기·`inspect_provider`·Worker 실행에서 직접 확인한 사실이다.
+
+**데몬 기본 프로토콜**: Paseo 데몬은 모든 에이전트에 `daemon.appendSystemPrompt`로 조율 규칙을 이미 주입한다 [관측]. (a) 부모가 있는 에이전트는 완료·차단·사람 결정 필요 시 부모에게 `send_agent_prompt`로 한 번 `PROJECT_DONE:`/`BLOCKED:`/`NEED_APPROVAL:` 접두어 메시지(증거: commit SHA, 테스트 출력 한 줄, 리뷰 판정)를 보내고, 진행만 있는 턴에는 접두어를 쓰지 않는다. (b) 자식 종료 알림은 턴 종료일 뿐 완료 판정 근거가 아니다. (c) 폴링 금지, 대기는 턴 종료 + 알림이며 heartbeat는 fallback이다. (d) 자식 권한 요청은 대상 저장소 또는 `~/.paseo/worktrees` 안에서만 승인하고 그 밖은 에스컬레이션한다. (e) 만든 에이전트는 끝나면 archive하고 명시 허용 없이 push·배포·브랜치 삭제를 하지 않는다. 이 문서는 이 프로토콜을 기본값으로 인용하고, 충돌하거나 중복되는 별도 보고 형식을 만들지 않는다. 정책 고유 항목은 그 위에 추가한다.
 
 이 규칙은 Paseo가 관리하는 에이전트에만 적용한다. 프로젝트 Task 등록, Gitflow·작업 위치, Human Gate, 사용자 승인 규칙은 기존 정책을 그대로 따른다. Claude Code 내부 서브에이전트(Agent 도구)나 직접 연 터미널 세션은 Paseo 관리 에이전트가 아니며 자동 정리되지 않는다.
 
@@ -33,7 +35,7 @@
    - `labels`: `task.id=<TASK_ID>`, `role=<worker|reviewer|lookup>`, `route=<프로필 id>`, `attempt=<n>`. 라벨 키 규칙은 초안이며 Paseo 측 예약 키와 충돌하지 않는지 [미확인].
    - `notifyOnFinish`: 기본 true 유지.
    - `initialPrompt`: 아래 배정 계약.
-3. 배정 계약(초기 프롬프트에 포함): 역할과 재위임 금지, 정책 버전, Task ID, 워크스페이스 ID·경로·기준 ref/SHA, 담당 파일·책임, 인터페이스, 제약, 완료 조건, 금지 행위(push·merge·배포·삭제·전역 설정 수정), 장시간 프로세스·로그 규칙, 보고 형식(7절), Owner ID.
+3. 배정 계약(초기 프롬프트에 포함): 역할과 재위임 금지, 정책 버전, Task ID, 워크스페이스 ID·경로·기준 ref/SHA, 담당 파일·책임, 인터페이스, 제약, 완료 조건, 금지 행위(push·merge·배포·삭제·전역 설정 수정·재위임), Codex Worker이면 «commit하지 않고 변경 파일·diff를 보고» 규칙(5절), 장시간 프로세스·로그 규칙, 보고 형식(7절), Owner ID.
 4. 시작 확인: 생성 응답은 수락일 뿐이다. `get_agent_status`가 `running`이거나 활동 기록에 첫 턴이 보일 때 "시작"으로 기록한다. 응답이 모호하면 새 Worker를 추가하지 않고 같은 `agentId`의 상태를 먼저 확인한다.
 5. 요청한 provider·model·thinking과 상태 스냅샷에서 확인한 값을 따로 기록한다. 스냅샷에 실제 model·thinking이 나오는지는 [미확인]이며, 확인할 수 없으면 "실행 모델 미검증"으로 남긴다.
 
@@ -65,13 +67,14 @@ Orca 규칙의 개념을 그대로 이월한다.
 2. 프로젝트의 검토된 버전별 manifest(진입 지침, 정책 snapshot·manifest, guard, 클라이언트별 hook 설정)에 따라 지원 설치 도구로 설치하거나, 프로젝트가 허용하면 담당 AI가 검증된 원본에서 명시된 파일만 덮어쓰지 않고 복사한다. 복사 후 bytes·권한을 원본·manifest와 대조하고 원본 버전·해시·대상·결과를 기록한다. 비밀·개인 Task context·무관한 설정은 복사하지 않는다.
 3. worktree 생성 / 파일 설치 / 클라이언트 신뢰 / hook 실제 로딩을 서로 다른 상태로 기록한다. `paseo.json` setup 훅 성공이나 워크스페이스 생성 성공만으로 준비 완료로 보지 않는다.
 4. 파일이 없으면 "정책 설치 필요", 설치 bytes·hook 로딩을 확인할 수 없으면 구체적 차단 사유를 기록하고 일반 배정을 멈춘다. Task·worktree·변경을 보존하고 승인된 설치·복구 경로를 같은 worktree에 적용한다. worktree를 다시 만들거나 클라이언트를 바꾸거나 같은 생성을 반복해 검사를 피하지 않는다.
-5. 일반 업무 재개 전 새 세션에서 선택한 클라이언트의 정책·hook 로딩과 허용/거부 사례를 확인한다. Paseo Claude 에이전트는 Claude Agent SDK로 로컬 `claude`를 실행하고 user·project·local 설정을 읽는다고 되어 있으나 [SRC], 프로젝트 hook이 Paseo 경유 세션에서 실제로 실행되는지는 [미확인]이므로 첫 사용 시 확인한다.
+5. 일반 업무 재개 전 새 세션에서 선택한 클라이언트의 정책·hook 로딩과 허용/거부 사례를 확인한다. guard의 Paseo 모드는 (1) `paseo.json` setup 훅으로 정책(guard·hook 설정) 설치를 자동화하고 (2) 새 세션에서 hook이 실제 로딩되는 것을 확인한 **뒤에만** 켠다(Q2, 2단계 L4 검토 대상). guard는 완전한 샌드박스가 아니다. Codex 에이전트는 Paseo worktree의 Git 메타데이터 쓰기가 샌드박스에 막혀 설치 파일의 `git add/commit`이 안 되므로 [관측], 설치·commit 단계는 Claude Worker 또는 Owner가 맡는다. 이 사례는 Codex 세션의 AGENTS.md·hook 로딩 확인(미확인)과 함께 첫 사용 시 점검한다. Paseo Claude 에이전트는 Claude Agent SDK로 로컬 `claude`를 실행하고 user·project·local 설정을 읽는다고 되어 있으나 [SRC], 프로젝트 hook이 Paseo 경유 세션에서 실제로 실행되는지는 [미확인]이므로 첫 사용 시 확인한다.
 6. 프로젝트의 설치 전용 Task만 제한된 설치 예외로 진행할 수 있다.
 
 ## 5. 정산과 정리 (settlement / worker-release 대응)
 
 1. 완료 알림을 받으면 Worker의 결과 보고(7절)와 검증 근거를 Task 로컬 기록에 보존한다. Claude Worker는 Owner에게 보낸 보고 메시지, Codex Worker는 완료 알림에 포함된 마지막 응답 또는 `get_agent_activity`로 확인한다.
-2. `get_agent_status`로 상태가 `running`이 아님을 확인하고, 대기 중 권한 요청이 없는지 본다. 쓰기 Worker는 worktree의 `git status`로 미커밋 변경을 결과 보고와 대조한다.
+2. `get_agent_status`로 상태가 `running`이 아님을 확인하고, 대기 중 권한 요청이 없는지 본다. 쓰기 Worker는 worktree의 `git status`로 미커밋 변경을 결과 보고와 대조한다. **Codex Worker는 commit하지 않는다**: Paseo worktree의 Git 메타데이터(`.git/worktrees/...`)가 작업 폴더 밖 원본 저장소 `.git`에 있어 Codex 기본 권한(auto) 샌드박스가 `index.lock` 생성을 거부하므로(Operation not permitted) `git add/commit`이 실패한다 [관측]. Codex Worker의 변경은 미커밋 상태가 정상이며, 변경 파일·diff 보고와 `git status`가 일치하는지 확인한 뒤 commit은 Claude Worker 또는 Owner가 한다. 권한 모드를 올려 우회하지 않는다. commit하는 쪽은 `git add <명시 파일>` 후 staged diff가 보고와 같은지 확인하고 내용은 고치지 않는다. 공유 문서의 문서 담당자는 Codex가 아니라 Claude Worker로 배정하는 것을 기본으로 하고, 불가피하면 Codex가 내용을 쓰고 Claude Worker 또는 Owner가 commit한다(Owner는 내용 편집 금지 유지).
+   - **자식 목록 점검(재위임 방지)**: 정산 때 `list_agents`와 부모 라벨로 원장에 없는 에이전트(손자 포함)가 있는지 확인하고, 발견하면 정리하지 말고 Root에 보고한다. 재위임 위험은 Paseo 도구가 열려 있는 Claude Worker에 한정되며, Codex 제공자는 Paseo 도구가 없다 [관측].
 3. 원장에 정산을 기록한 직후 `archive_agent`로 정리하고 `archived` / `archive_pending` / `archive_unknown` 중 하나를 기록한다. 정산된 실패도 결과 확보 후 정리한다.
 4. 정리하지 않는 대상: `running`·`initializing`, 정산 불명, 사용자 소유(사용자가 직접 만들었거나 탭에서 쓰는 중), 이 Task 이전부터 있던 에이전트, 소유가 확인되지 않은 에이전트.
 5. 사용자가 그 세션을 남겨 달라고 명시한 경우에만 열어 두고 이유와 보유자를 기록한다.
@@ -89,9 +92,11 @@ Orca 규칙의 개념을 그대로 이월한다.
 
 ## 7. Worker 결과 형식 (Worker result 대응)
 
-각 Worker는 하나의 간결한 보고를 보낸다: Task ID, Worker agentId, 결과(완료/차단/승인 필요/실패), 변경 파일과 요약, 실행한 검증 명령·결과·근거 위치, 미확인 항목·차단 사유, 다음 조치, 직접 띄운 백그라운드 프로세스와 로그 크기. Claude Worker는 Paseo 도구가 있으면 `send_agent_prompt`로 Owner에게 `PROJECT_DONE:`/`BLOCKED:`/`NEED_APPROVAL:` 접두사 보고를 한 번 보낸다(진행 중 보고에는 접두사를 쓰지 않는다). Codex Worker는 같은 내용을 최종 응답으로 남긴다.
+**기본 프로토콜을 따른다**: Claude Worker(Paseo 도구 있음)는 데몬 프로토콜대로 완료·차단·승인 필요 시 Owner에게 `send_agent_prompt`로 **한 번** `PROJECT_DONE:`/`BLOCKED:`/`NEED_APPROVAL:` 접두어 메시지를 보낸다. 진행만 있는 턴에는 접두어를 쓰지 않는다. 정책은 접두어·증거 규칙을 바꾸지 않는다. 이 세션에서 Worker 보고가 이 방식(`PROJECT_DONE:`/`BLOCKED:`)으로 도착했다 [관측]. Codex Worker는 Paseo 도구가 없으므로 같은 내용을 최종 응답으로 남긴다(Owner가 알림에 포함된 마지막 응답 또는 `get_agent_activity`로 확인).
 
-Owner는 원장에 요청·확인된 provider/model/thinking, 경과 시간, 시도 번호와 실패 종류, 검증 상태, 정리 상태를 함께 기록한다. 가능하면 `ai_policy.usage record`로 같은 Task ID에 기록한다. Paseo `usage` 명령은 계정 한도를 보여 줄 뿐 에이전트별 소비량이 아니다 [DOC]. 에이전트별 토큰은 SDK `lastUsage`로만 확인 가능하며 MCP 경로는 [미확인]이므로 없으면 비워 둔다.
+**정책 고유 항목은 그 메시지(또는 최종 응답) 본문에 추가한다**. 별도 메시지·접두어를 만들지 않는다: Task ID, Worker agentId, 변경 파일과 요약, 실행한 검증 명령·결과·근거 위치(데몬이 요구하는 증거 한 줄에 더해 요구/완료/검증 근거를 대응시킴), 미확인 항목·차단 사유, 다음 조치, 직접 띄운 백그라운드 프로세스와 로그 크기. Codex Worker는 commit하지 않았음과 변경 파일·diff 위치를 함께 적는다(5절). 결과 구분은 데몬 접두어와 대응한다: 완료=`PROJECT_DONE:`, 차단·실패=`BLOCKED:`, 승인 필요=`NEED_APPROVAL:`.
+
+Owner는 알림이나 접두어만으로 완료를 판정하지 않는다(데몬 규칙 (b)). 보고의 증거를 5절 정산 절차로 확인한 뒤 원장에 요청·확인된 provider/model/thinking, 경과 시간, 시도 번호와 실패 종류, 검증 상태, 정리 상태를 함께 기록한다. 가능하면 `ai_policy.usage record`로 같은 Task ID에 기록한다. Paseo `usage` 명령은 계정 한도를 보여 줄 뿐 에이전트별 소비량이 아니다 [DOC]. 에이전트별 토큰은 SDK `lastUsage`로만 확인 가능하며 MCP 경로는 [미확인]이므로 없으면 비워 둔다.
 
 ## 8. Owner 장애와 인계 (Controller resume / consumer_fenced 대응)
 
@@ -111,7 +116,17 @@ Paseo에는 Run 바인딩·`run-use`·`consumer_fenced`가 없다. 소유는 부
 
 ## 10. 실행 환경 점검 (세션 시작 시 1회, 값은 기록하지 않음)
 
-- 데몬이 깨끗한 로그인 셸에서 시작됐는지: Claude Code 세션 안에서 띄운 데몬은 자식 `claude`가 "Not logged in"으로 실패할 수 있다(#3618) [GH].
-- 데몬 환경 변수(`ANTHROPIC_BASE_URL`, API 키, 프록시)가 자식 에이전트로 전달된다 [SRC]. 존재 여부만 확인하고 값은 출력하지 않는다. 전역 정책의 기존 프록시 설정을 유지할지 여부는 사용자 결정이다.
-- 한국어: macOS 데스크톱 앱이 관리하는 데몬은 locale이 `C`라 터미널에서 한글이 깨질 수 있다(#3513) [GH]. UTF-8 locale(`LANG`/`LC_ALL`)을 가진 셸에서 `paseo daemon start`로 띄우는 우회가 제안돼 있으나 [미확인]. 한글 경로·커밋 메시지·Kanban 파일을 다루는 작업 전에 확인한다.
-- relay 꺼짐, loopback listen, 비밀번호 설정 여부, Paseo 도구 주입 설정을 확인한다. 바꾸는 것은 사용자 승인 사항이다.
+데몬 운영 방식은 **바꾸지 않고 현 상태를 기준으로 명문화**한다(Q5). 관측 기준선(2026-11-25): 데몬은 `desktopManaged=false`인 독립 데몬이고, 에이전트 셸 로케일은 `ko_KR.UTF-8`이며, 에이전트 셸에 `ANTHROPIC_BASE_URL` 환경변수는 없다 [관측]. 시작 시 아래를 점검하고 기준선과 달라진 항목만 사용자에게 보고한다. 값(키·URL·비밀번호)은 출력·기록하지 않고 존재 여부와 상태만 쓴다.
+
+| 점검 항목 | 확인 방법 | 비고 |
+|---|---|---|
+| 데몬 관리 방식 | `paseo daemon status`의 `desktopManaged` | `true`면 앱 종료 시 데몬이 멈출 수 있음(`keepRunningAfterQuit: false`) [SRC] |
+| 에이전트 셸 로케일 | 에이전트 셸의 `LANG`/`LC_ALL`이 UTF-8인지 | `C`면 한글이 깨질 수 있음(#3513) [GH]. 한글 경로·커밋 메시지·Kanban 작업 전에 확인 |
+| 프록시·API 키 환경변수 | 존재 여부만(`ANTHROPIC_BASE_URL`, API 키류, 프록시) | 데몬 환경 변수는 자식 에이전트로 전달됨 [SRC]. 전역 정책의 기존 프록시 설정 유지 여부는 사용자 결정 |
+| 로그인 | 자식 `claude`가 "Not logged in"으로 실패하지 않는지 | Claude Code 세션 안에서 띄운 데몬에서 발생(#3618) [GH] |
+| relay 상태 | `daemon.relay.enabled` 값(켜짐/꺼짐) | 현재 켜짐이며 의도는 **사용자 확인 필요**. 임의로 끄거나 바꾸지 않는다. relay 사용은 Human Gate 항목(Q9) |
+| 비밀번호 설정 여부 | `daemon.*`의 비밀번호 계열 키 존재 여부(값 출력 금지) | 현재 키 없음. 조사 문서는 relay 끄기·비밀번호 설정을 권고했으나 변경은 사용자 결정 |
+| 도구 주입 설정 | 제공자별 `disabledTools`·`paseoTools.enabled`(값 아닌 목록 형태만) | claude: 터미널·워크스페이스 스크립트만 차단, codex: Paseo 도구 없음 [관측] |
+| 데몬 조율 프로토콜 | 에이전트가 받은 시스템 지침에 부모 보고 접두어 규칙이 있는지 | 데몬 버전·설정 변경으로 달라질 수 있음. 없으면 사용자에게 보고하고, 보고 절차는 정책 문서의 형식을 임시로 따름 |
+
+CORS 허용 출처는 기본값이다 [관측]. 바꾸는 것은 사용자 승인 사항이며 정책은 변경을 권하지 않는다. 장시간 세션·여러 에이전트의 메모리 증가 위험(9절)과 함께, 점검 결과가 기준선과 다르면 일반 Worker 배정 전에 보고한다.

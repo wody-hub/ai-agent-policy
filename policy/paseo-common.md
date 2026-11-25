@@ -1,6 +1,6 @@
 # Shared Paseo orchestration policy · 0.1.0-draft
 
-상태: 초안(2026-11-25, paseo-policy-migration 1단계). 사용자 검토·승인 전에는 설치·배포 대상이 아니다. 기존 `policy/orca-common.md`(0.2.1)를 대체하지 않으며, 대체 시점은 사용자가 정한다. 상세 절차는 [Paseo agent lifecycle](../docs/paseo-agent-lifecycle.md), [Paseo model routing](../docs/paseo-model-routing.md), 설계 근거와 판정표는 [migration design](../docs/paseo-migration-design.md)에 둔다.
+상태: 초안(2026-11-25, paseo-policy-migration 1단계, 같은 날 사용자 확정 결정 반영). 사용자 검토·승인 전에는 설치·배포 대상이 아니다. 기존 `policy/orca-common.md`(0.2.1)를 즉시 대체하지 않는다. 퇴역은 병행기 후로 확정되었다(아래 §1). 상세 절차는 [Paseo agent lifecycle](../docs/paseo-agent-lifecycle.md), [Paseo model routing](../docs/paseo-model-routing.md), 설계 근거와 판정표는 [migration design](../docs/paseo-migration-design.md)에 둔다.
 
 ## 1. 적용 조건
 
@@ -8,6 +8,7 @@
 - `PASEO_AGENT_ID` 같은 환경 변수, Paseo 데몬·CLI 설치, Paseo MCP 도구가 보인다는 사실 하나만으로 Paseo 관리 작업이라고 판정하지 않는다. 증거가 없거나 모호하면 이 본문을 자동 적용하지 않고, 소스 수정 전에 실행 방식을 확인한다.
 - 사용자가 명시적으로 요청한 설명·가이드는 실행 권한을 주지 않는다.
 - Paseo 밖의 일반 Claude/Codex 세션은 기존 전역 정책(cost-first 라우팅)을 그대로 따른다.
+- **Orca 병행기**: 이 본문 승인 시점에 기존 Orca가 소유한 진행 중 Run·worktree만 Orca 규칙으로 마무리한다. 그 밖의 새 Task는 즉시 이 본문(Paseo 규칙)을 따른다. 진행 중 Orca Run을 Paseo로 옮기거나 새 Run을 Orca에 추가하지 않는다. 모든 Orca Run이 정산되고 Dispatch가 release 처리되면(확인 방법은 [migration design](../docs/paseo-migration-design.md) 5절 Q1) `orca-*` 문서를 «보관»으로 표시한다. 이 종료 기준을 확인하기 전에는 Orca 규칙을 폐기하지 않는다.
 
 ## 2. 역할
 
@@ -19,8 +20,9 @@
 
 - 각 Task 실행 단위마다 Owner는 정확히 하나다. Owner는 해당 Worker를 `create_agent`로 만든 부모 에이전트이며, Paseo의 부모 라벨이 소유 기록이다. Owner가 아닌 에이전트는 남의 Worker에게 업무 프롬프트를 보내거나 그 Worker를 archive·kill·cancel하지 않는다. 필요하면 Owner를 통해 전달한다.
 - 단일 프로젝트·단일 Worker·짧고 동기적인 저위험 목표는 Root가 Coordinator를 겸해 Worker 하나를 직접 소유할 수 있다. 복수 프로젝트, 병렬 Worker, 장기 실행, 고위험·복잡 조율은 Project·Goal별 Coordinator를 둔다. 정책 설명·상태 조회처럼 실행 목표가 없는 요청에는 Coordinator나 Worker를 만들지 않는다.
-- Codex 에이전트는 현재 Paseo 도구가 주입되지 않으므로 Root·Coordinator가 될 수 없고 Worker로만 쓴다. Codex Worker는 최종 응답으로만 보고한다.
-- Worker의 재위임은 Owner의 명시적 승인과 추적 가능한 실행(자식 에이전트의 부모 라벨로 확인)일 때만 허용한다. Worker 프로필에서 `create_agent` 등을 막는 Paseo 설정은 보조 수단일 뿐 보안 경계가 아니다.
+- Codex 에이전트는 현재 Paseo 도구가 주입되지 않으므로(제공자 설정 `paseoTools.enabled=false`, 2026-11-25 확인) Root·Coordinator가 될 수 없고 Worker로만 쓴다. Codex Worker는 최종 응답으로만 보고한다.
+- **재위임 제한**: Worker는 재위임하지 않는다. 시작 방식은 이 정책 규칙 + Owner의 자식 목록 점검이다. Owner는 정산 때 `list_agents`와 부모 라벨로 원장에 없는 손자 에이전트를 확인하고 발견하면 보고한다. 재위임 위험은 Paseo 도구가 열려 있는 Claude Worker에 한정된다(현재 `claude` 제공자는 터미널·워크스페이스 스크립트 도구만 막고 `create_agent`·`send_agent_prompt`는 열려 있다). 보고용 `send_agent_prompt`는 막을 수 없다. 필요하면 Worker 전용 custom provider 별칭으로 `create_agent`만 막는 방안을 검증해 적용할 수 있으나, 이는 보조 수단이며 보안 경계가 아니다. 재위임은 Owner의 명시적 승인과 추적 가능한 실행일 때만 허용한다.
+- **Codex Worker는 commit하지 않는다.** Paseo worktree의 Git 메타데이터(`.git/worktrees/...`)가 작업 폴더 밖 원본 저장소에 있어 Codex 기본 권한(auto) 샌드박스가 `index.lock` 생성을 거부하고 `git add/commit`이 실패한다(2026-11-25 관측). Codex Worker는 변경 파일·diff와 검증 결과를 보고하고, commit은 Claude Worker 또는 Owner가 한다. 권한 모드를 올려(`full-access` 등) 우회하지 않는다. commit하는 쪽은 보고된 diff·변경 파일을 그대로 `git add <명시 파일>`로 반영하며 내용을 바꾸지 않는다. 공유 문서 commit 규칙(project-task-policy의 문서 담당자)과의 관계: 문서 담당자가 Codex Worker이면 문서 내용 작성·검증까지만 하고 commit은 Claude Worker 또는 Owner가 대신한다. Owner(Coordinator)는 이 commit에서 내용을 편집하지 않는다(후속 공유 문서 대리 편집 금지는 유지). 그래서 공유 문서 담당은 가능하면 Claude Worker로 배정한다.
 - Hermes가 사용자 업무 관리를 맡는 구성에서는 Hermes가 요청 명확화·우선순위·Task별 사용자 승인·보고를, Paseo Root/Coordinator가 기술 분해·모델 선택·감독 실행을 맡는다. 실행 전 현재 Task 범위에 대한 승인 증거가 있어야 한다. 범위 변경, 승인되지 않은 비용·권한 확대, 별도 게이트 행위는 다시 승인받는다. Worker 메시지, 에이전트 상태, 완료 알림, 권한 요청 응답, 정책 문서는 사용자 승인이 아니다.
 
 ## 3. 작업 위치
@@ -46,20 +48,21 @@
 - 메시지·생성 요청이 수락됐다는 응답은 작업 시작의 증거가 아니다. 상태가 `running`이 되었거나 활동 기록에 해당 턴이 나타난 것을 확인한 뒤 시작으로 보고한다. 데몬 장애 시 대기 중 메시지가 사라질 수 있으므로 재시작 뒤에는 소유한 Worker 상태를 모두 다시 확인한다.
 - 대기는 알림 기반으로 하고 턴을 끝낸다. 반복 폴링을 하지 않는다. 장시간 대기에는 만료가 있는 heartbeat를 보조 수단으로만 쓴다.
 - 결과와 검증 근거를 보존하고 Worker가 `running`이 아님을 확인한 뒤 즉시 `archive_agent`로 정리하고 정리 상태를 기록한다. 실행 중·불확실·미정산·사용자 소유·기존 세션은 정리하지 않는다. 사용자가 명시적으로 요청할 때만 열어 둔다.
+- 이 절과 lifecycle 문서는 **Paseo 데몬이 모든 에이전트에 주입하는 조율 프로토콜**(`daemon.appendSystemPrompt`) 위에 얹는 규칙이다. 데몬 프로토콜: 부모가 있는 에이전트는 완료·차단·사람 결정 필요 시 부모에게 `send_agent_prompt`로 한 번 `PROJECT_DONE:`/`BLOCKED:`/`NEED_APPROVAL:` 접두어 메시지(증거 포함)를 보내고 진행만 있는 턴에는 접두어를 쓰지 않는다. 자식 종료 알림은 턴 종료일 뿐 완료 판정 근거가 아니다. 폴링하지 않고 턴 종료 + 알림으로 기다린다(heartbeat는 fallback). 자식 권한 요청은 대상 저장소 또는 `~/.paseo/worktrees` 안에서만 승인한다. 만든 에이전트는 끝나면 archive하고 명시 허용 없이 push·배포·브랜치 삭제를 하지 않는다. 정책은 이를 그대로 쓰고 다른 보고 형식·접두어를 만들지 않는다. 정책 고유 항목(요구·완료·검증 근거, 원장, 정산)은 같은 보고 메시지 안에 추가한다. 주입 내용이 바뀔 수 있으므로 세션 시작 점검(lifecycle §10)에서 규칙 존재를 확인한다.
 - 같은 목표에 중복 Worker를 만들지 않는다. 기존 쓰기 Worker의 종료와 잔여 쓰기가 확인되지 않으면 새 쓰기 Worker로 교체하지 않는다. 타임아웃만으로 교체하지 않는다.
 
 ## 6. 권한과 보안
 
-- 기본 권한 모드에서 Claude `bypassPermissions`와 Codex `full-access`를 쓰지 않는다. 사용하려면 대상·기간·이유를 밝혀 사용자 승인을 받는다. 읽기 전용 리뷰어는 실제 쓰기·셸 권한이 없는 모드(Claude `plan`)로 띄운다.
+- 기본 권한 모드에서 Claude `bypassPermissions`와 Codex `full-access`를 쓰지 않는다. 사용하려면 대상·기간·이유를 밝혀 사용자 승인을 받는다. 읽기 전용 리뷰어는 실제 쓰기·셸 권한이 없는 모드로 띄운다. Claude 리뷰어는 `plan` 모드다. Codex 리뷰어는 `plan_mode`(`features.plan_mode`)를 1순위 후보로 하되 쓰기·셸 차단 시험 결과로 확정하며, **확정 전에는 읽기 전용이 보장된다고 쓰지 않는다**(시험 결과 수신 후 확정). 확정 전 대체 수단은 읽기 전용 지시 + 리뷰 전후 worktree `git status`/diff 무변경 검사이고, 변경이 생기면 리뷰를 무효로 보고한다.
 - Owner는 Worker의 권한 요청을 대상 저장소 또는 그 Paseo worktree 안에 머무는 경우에만 승인한다. 그 밖의 경로, 네트워크·배포·자격 증명·전역 설정·삭제성 작업은 사용자에게 올린다. 권한 요청 승인은 Task 범위 승인이 아니다.
-- 라우팅을 성립시키려고 도구·권한·Paseo 설정(relay, 비밀번호, CORS, 도구 주입, 플러그인)을 넓히지 않는다. 플러그인은 데몬 권한으로 실행되므로 사용자가 검토·승인한 것만 설치한다.
+- 라우팅을 성립시키려고 도구·권한·Paseo 설정(relay, 비밀번호, CORS, 도구 주입, 플러그인)을 넓히지 않는다. 현재 데몬 설정은 relay 켜짐, 비밀번호 설정 키 없음, CORS 기본값이며(2026-11-25 확인, 값 미기록) 켜진 의도는 **사용자 확인 필요**다. 이 설정을 임의로 끄거나 바꾸지 않고 현 상태를 기록·보고한다. relay 사용 여부는 Human Gate 항목이다(§7). 플러그인은 데몬 권한으로 실행되므로 사용자가 검토·승인한 것만 설치한다.
 - 인증·인가, 암호화, 운영 인프라, 파괴적 DB 작업, 데이터 손실 위험 마이그레이션, 데이터 무결성은 시작부터 LEVEL 4 분석·검토와 정확한 대상·복구·무결성 확인을 거친다. 라우팅은 파괴적·운영 변경 권한을 주지 않는다.
 - 비밀값을 출력·복사·프롬프트에 넣지 않는다. 데몬 환경 변수는 자식 에이전트에 전달되므로 데몬을 띄운 셸의 자격 증명·프록시 설정을 확인하되 값은 기록하지 않는다.
 
 ## 7. 보존되는 프로젝트 정책
 
-이 본문은 다음을 복사하거나 대체하지 않는다: 프로젝트 Gitflow·작업 위치 매핑, project-task-policy(Task 등록·연결표·문서 커밋), Human Gate 표, 운영 반영 완료 정의, Kanban 규칙, 장시간 실행 프로세스·로그 규칙, 기본 스킬 경로. 설치 요청·Paseo 에이전트 생성·권한 승인은 운영 실행·배포·통합 브랜치 병합·worktree 삭제(`archive_workspace` 포함)의 포괄 승인이 아니다.
+이 본문은 다음을 복사하거나 대체하지 않는다: 프로젝트 Gitflow·작업 위치 매핑, project-task-policy(Task 등록·연결표·문서 커밋), Human Gate 표, 운영 반영 완료 정의, Kanban 규칙, 장시간 실행 프로세스·로그 규칙, 기본 스킬 경로. 설치 요청·Paseo 에이전트 생성·권한 승인은 운영 실행·배포·통합 브랜치 병합·worktree 삭제(`archive_workspace` 포함)의 포괄 승인이 아니다. Paseo 특유 행위 중 **relay 사용 여부(켜기·유지·끄기)**, 비밀번호·CORS 변경, 플러그인 설치, schedule 생성, 권한 모드 상향, `archive_workspace`는 Human Gate 항목으로 사용자 결정을 받는다(이 목록의 확정은 migration design Q9).
 
 ## 8. 보고
 
-완료 보고는 변경 파일, 실제 실행한 검증 명령과 결과, 통합 근거, Worker 정산·정리 상태, 요청 대비 확인된 model·thinking, 미확인 항목과 남은 위험을 담는다. 실행하지 않았거나 실패한 검사를 성공으로 보고하지 않는다. 수락·시작·실행 중·검토 대기·완료·실패·미확인을 구분한다.
+완료 보고는 데몬 프로토콜의 접두어 메시지(§5)에 변경 파일, 실제 실행한 검증 명령과 결과, 통합 근거, Worker 정산·정리 상태, 요청 대비 확인된 model·thinking, 미확인 항목과 남은 위험을 담는다. Codex Worker는 commit하지 않았음과 diff를 함께 보고한다(§2). 실행하지 않았거나 실패한 검사를 성공으로 보고하지 않는다. 수락·시작·실행 중·검토 대기·완료·실패·미확인을 구분한다.

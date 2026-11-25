@@ -1,6 +1,6 @@
 # Paseo 모델 라우팅 (draft 0.1.0)
 
-상태: 초안(2026-11-25). 정본 값은 [`policy/model-routing.json`](../policy/model-routing.json)(1.5.0)이며 이 문서는 그 값을 Paseo 프로필에 대응시키는 규칙이다. `model-routing.json`은 이번 단계에서 수정하지 않았고, 변경은 4절에 "제안"으로만 적는다. Orca용 세부 유형표는 [Orca 작업 유형별 모델 라우팅](orca-model-routing.md)을 그대로 쓴다.
+상태: 초안(2026-11-25, 같은 날 사용자 확정 결정 반영, **Q3 읽기 전용 리뷰어는 시험 결과 수신 후 확정**). 정본 값은 [`policy/model-routing.json`](../policy/model-routing.json)(1.5.0)이며 이 문서는 그 값을 Paseo 프로필에 대응시키는 규칙이다. `model-routing.json`은 이번 단계에서 수정하지 않았고, 변경은 4절에 "제안"으로만 적는다. Orca용 세부 유형표는 [Orca 작업 유형별 모델 라우팅](orca-model-routing.md)을 그대로 쓴다.
 
 ## 1. 원칙
 
@@ -21,8 +21,15 @@
 | `l4-critical` | claude/claude-opus-5-5 · auto · high | `levels.4`: Opus high → Sol high | 일치. 프로필 메모의 대체 ID `gpt-6.2-sol`은 json 고정 ID `gpt-6.1-sol`과 다르다(캐시 해석 결과인지 [미확인]) |
 | `l5-last-resort` | claude/claude-fable-5-1 · auto · high | `levels.5`: Fable high → Astra high | 일치. 메모의 `gpt-6.2-astra` vs json `gpt-6-astra` 동일 사유 [미확인] |
 | `review-codex-work` | claude/claude-sonnet-5-5 · **plan** · medium | `code_review_codex`: Sonnet medium(중요 시 `important_review_codex` Sonnet high) | 일치. plan 모드로 읽기 전용 |
-| `review-claude-work` | codex/gpt-6.1-terra · auto · high | `code_review_claude`: Terra high → Luna high | 모델 일치. **읽기 전용이 모드로 강제되지 않는다**(메모: "Instruct read-only"). 열린 질문 Q3 |
+| `review-claude-work` | codex/gpt-6.1-terra · auto · high | `code_review_claude`: Terra high → Luna high | 모델 일치. **읽기 전용이 모드로 강제되지 않는다**(메모: "Instruct read-only"). Codex에는 `plan_mode` 토글(`features.plan_mode`, «planning-only collaboration mode»)이 있다(2026-11-25 `inspect_provider`). 1순위 후보이나 쓰기·셸 차단 시험 결과로 확정(**시험 결과 수신 후 확정**, Q3). 확정 전에는 아래 2.1절 대체 수단을 쓴다 |
 | `lookup` | codex/gpt-6-luna · auto · medium | `roles.lookup`: Luna medium, `log_summary`: Luna low | 일치(log_summary는 thinking low로 변경해 생성) |
+
+### 2.1 Codex 리뷰어 읽기 전용 (Q3, 확정 대기)
+
+- **1순위 후보**: 리뷰어 프로필(`review-claude-work`)에 Codex `plan_mode`를 적용한다. 이 값을 프로필에 넣는 것은 사용자 승인 사항이며, 시험에서 «쓰기·셸 차단이 실제로 된다»가 확인되기 전에는 넣지 않고 읽기 전용이 보장된다고 쓰지 않는다.
+- **확정 근거**: 사용자가 후속 메시지로 전달하는 시험 결과. 수신 후 이 절, 2절 표의 `review-claude-work` 행, 5절 P4, [common](../policy/paseo-common.md) §6, migration design 7절 미확인 4번·15번을 함께 갱신한다.
+- **확정 전 대체 수단(유지)**: (1) 리뷰 지시에 읽기 전용(파일 수정·셸 쓰기·commit 금지)을 명시한다. (2) Owner가 리뷰 전후 대상 worktree의 `git status`와 diff를 비교해 변경이 없음을 확인한다. 변경이 생기면 그 리뷰 결과를 무효로 하고 원인과 함께 보고하며 되돌리지 않고 Owner가 판단한다. (3) 리뷰어는 commit하지 않는다(Codex는 어차피 Paseo worktree에서 commit이 막히고, 권한 모드를 올려 우회하지 않는다).
+- Claude 리뷰어(`review-codex-work`)는 `plan` 모드로 읽기 전용이 모드로 강제된다.
 
 세부 작업 유형(`requirements`, `decomposition`, `architecture`, `refactor_design`, `db_design`, `test_design` 등)이 Terra high나 Sonnet high를 기본으로 지정하는 경우, 맞는 프로필이 없으면 Owner가 정본 값으로 `provider`·`thinkingOptionId`를 직접 구성하고 선택 이유를 기록한다. 이를 위해 프로필을 새로 만들거나 바꾸는 것은 사용자 승인 사항이다.
 
@@ -49,13 +56,13 @@
 | 승격 인계 | goal, related_files, current_state, errors, attempts, hypotheses, decision_needed | 새 Worker의 초기 프롬프트에 이 항목만 넣는다 |
 | 해결 후 | 기본 레벨 복귀 | 후속 Worker는 원래 레벨 프로필로 |
 
-비모델 실패 분류 추가(Paseo 특유): 알림 미도착, 수락 후 시작 근거 없음, 데몬 재시작으로 `closed`, 권한 요청 대기, `ANTHROPIC_BASE_URL`·로그인 환경 문제(#3618), 한국어 locale 문제(#3513). 이것들은 승격 사유가 아니다.
+비모델 실패 분류 추가(Paseo 특유): 알림 미도착, 수락 후 시작 근거 없음, 데몬 재시작으로 `closed`, 권한 요청 대기, `ANTHROPIC_BASE_URL`·로그인 환경 문제(#3618), 한국어 locale 문제(#3513), Codex Worker의 Paseo worktree `git add/commit` 샌드박스 거부(Git 메타데이터가 작업 폴더 밖, 2026-11-25 관측). 이것들은 승격 사유가 아니다. Codex commit 거부는 재시도하거나 권한 모드를 올려 우회하지 않고, «Codex Worker는 commit하지 않음» 규칙대로 diff 보고 후 Claude Worker 또는 Owner가 commit한다.
 
 ## 5. `model-routing.json` 변경 제안 (미적용)
 
 - **P1 host 추가**: `hosts.paseo = {"tools": ["claude","codex"], "orchestrator_tools": ["claude"], "description": "Confirmed Paseo task: orchestrators must have Paseo tools (Claude); workers may be Claude or Codex."}`. 라우터에 `--host paseo` 출력(`paseo_create_agent`: `provider`, `settings.modeId`, `settings.thinkingOptionId`, 추천 프로필 id)을 추가하고 `orca_worker_args`는 orca host에서만 낸다. 기존 `--host orca` 결과는 바꾸지 않는다.
 - **P2 역할 기본값**: Paseo host에서 `root_orchestrator = sonnet high`, `project_coordinator = sonnet high`(대체 없음 또는 opus는 금지). Codex 계열은 Paseo 도구가 주입되기 전까지 오케스트레이터 후보에서 제외.
 - **P3 프로필 매핑 블록**: `paseo_profiles = {"root-orchestrator": {"role": "root_orchestrator"}, "dev-l1-simple": {"level": 1}, ...}`로 2절 표를 기계가 읽을 수 있게 둔다. 프로필 실제 값은 Paseo 설정이 정본이므로 json에는 이름 대응만 둔다.
-- **P4 읽기 전용 리뷰 mode**: `review_mode = {"claude": "plan", "codex": "<읽기 전용 모드 확인 후>"}`. Codex 쪽 값은 Q3 결정 뒤.
+- **P4 읽기 전용 리뷰 mode**: `review_mode = {"claude": "plan", "codex": "<plan_mode 시험 결과 확인 후>"}`. Codex 쪽 값은 Q3 시험 결과 수신 후 확정(후보: `plan_mode`).
 - **P5 Codex 고정 ID 확인**: 프로필 메모의 `gpt-6.2-sol`/`gpt-6.2-astra`가 현재 캐시 해석 결과로 확인되면 fallback ID 갱신 여부를 검토. 확인 전에는 바꾸지 않는다.
 - 버전은 1.6.0(가칭), `verified_on`은 실행 확인일로 기록한다.
