@@ -85,6 +85,8 @@ def check_profiles(config, profiles, *, model_catalog=None, paseo_models=None):
             expected=_desired(want)
             for field, value in expected.items():
                 if got.get(field)!=value: row['differences'].append({'field':field,'expected':value,'actual':got.get(field)})
+            if 'thinkingOptionId' not in expected and got.get('thinkingOptionId') is not None:   # null-effort profile with a stale thinking option
+                row['differences'].append({'field':'thinkingOptionId','expected':None,'actual':got['thinkingOptionId']})
             if pid in dup: row['differences'].append({'field':'id','expected':'unique','actual':'duplicate'})
             if row['differences']: row['status']='drift'; drift=True
             row['notes_differ']=want['notes'] is not None and got.get('notes')!=want['notes']
@@ -277,6 +279,8 @@ def plan_sync(raw, config_path, config, *, model_catalog, state, include_provisi
                 row['new_profile']=new
         else:
             diffs=[{'field':f,'current':cur.get(f),'desired':v} for f, v in desired.items() if cur.get(f)!=v]
+            if 'thinkingOptionId' not in desired and cur.get('thinkingOptionId') is not None:   # null effort: a set value is removed (a null value is already unset)
+                diffs.append({'field':'thinkingOptionId','current':cur['thinkingOptionId'],'desired':None})
             row['fields']=diffs
             if want['notes'] is not None and cur.get('notes')!=want['notes']: row['notes_differ']=True
             if not diffs: row['action']='noop'
@@ -300,7 +304,9 @@ def plan_sync(raw, config_path, config, *, model_catalog, state, include_provisi
         if _dump(data)!=raw: raise PolicyError('config_format_drift')
         for pid, row in rows.items():
             if row['action']=='create': profiles.append(dict(row['new_profile']))
-            elif row['action']=='update': by_id[pid].update(writes[pid])
+            elif row['action']=='update':
+                by_id[pid].update(writes[pid])
+                if any(d['field']=='thinkingOptionId' and d['desired'] is None for d in row['fields']): by_id[pid].pop('thinkingOptionId', None)
         new_bytes=_dump(data)
     body={'schema':1,'operation':'sync','config_path':os.path.abspath(config_path),'config_sha256':digest(raw),'include_provisional':bool(include_provisional),
           'overwrite':sorted(overwrite),'profiles':rows,'changes':len(writes),'conflicts':conflicts,'refusals':refusals,
@@ -351,7 +357,8 @@ def run_sync(a):
         try: _, now=_parse(after)
         except PolicyError: now=[]
         got={x['id']:x for x in now}
-        if after!=plan['new_bytes'] or any(got.get(pid, {}).get(f, KeyError)!=v for pid, want in plan['writes'].items() for f, v in want.items()):
+        if after!=plan['new_bytes'] or any(got.get(pid, {}).get(f, KeyError)!=v for pid, want in plan['writes'].items() for f, v in want.items()) \
+                or any(got.get(pid, {}).get('thinkingOptionId') is not None for pid, want in plan['writes'].items() if 'thinkingOptionId' not in want):
             raise PolicyError('post_write_verification_failed')
         state=_load_state(_state_dir(a), a.config); state.update(plan['record'])
         try: _save_state(_state_dir(a), state, digest(after), a.config)

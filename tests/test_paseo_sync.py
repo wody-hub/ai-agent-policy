@@ -380,6 +380,38 @@ class SyncRuleTests(unittest.TestCase):
             for d in (Path(xdg)/'ai-policy', Path(xdg)/'ai-policy'/'paseo-sync', sd, sd/'backups'): self.assertEqual(stat.S_IMODE(d.stat().st_mode), 0o700, d)
             self.assertEqual(len(list((sd/'backups').iterdir())), 1); self.assertTrue((sd/'state.json').exists())
 
+class NullEffortSyncTests(unittest.TestCase):
+    def scout(self, **kw):
+        p={'id':'scout','name':'scout','provider':'claude','model':'claude-haiku-5-5','modeId':'plan','thinkingOptionId':'high','notes':BASE['paseo_profiles']['scout']['description'],'features':{'x':1}}
+        p.update(kw); return p
+    def env(self, **kw): return Env(self, live_like(lambda ps: ps.append(self.scout(**kw))), catalog=FRESH_CATALOG())
+
+    def test_removal_is_a_conflict_without_a_record_and_an_update_with_one(self):
+        e=self.env(); before=e.snap()
+        code, out=e.dry()
+        self.assertEqual((code, out['profiles']['scout']['action'], out['conflicts']), (1, 'conflict', ['scout']))
+        self.assertEqual(out['profiles']['scout']['fields'], [{'field':'thinkingOptionId','current':'high','desired':None}])
+        self.assertEqual(e.snap(), before)
+        e.seed({'scout':{'thinkingOptionId':'high'}})
+        code, out=e.apply(); self.assertEqual((code, out['profiles']['scout']['action'], out['changes']), (0, 'update', 1))
+        scout=profile(e.loaded(), 'scout')
+        self.assertNotIn('thinkingOptionId', scout)
+        self.assertEqual((scout['features'], scout['notes'], scout['model'], scout['modeId']), ({'x':1}, BASE['paseo_profiles']['scout']['description'], 'claude-haiku-5-5', 'plan'))
+        self.assertEqual(profile(e.loaded(), 'l4-critical'), profile(live_like(), 'l4-critical'))
+        self.assertEqual(json.loads((e.state/'state.json').read_text())['profiles']['scout'], {'provider':'claude','model':'claude-haiku-5-5','modeId':'plan','thinkingOptionId':None})
+        code, out=e.apply(); self.assertEqual((code, out['changes']), (0, 0))              # stable afterwards
+
+    def test_overwrite_removes_a_hand_set_value_and_null_is_not_a_difference(self):
+        e=self.env(); code, out=e.apply('--overwrite','scout')
+        self.assertEqual((code, out['changes'], out['profiles']['scout'].get('overwritten')), (0, 1, True)); self.assertNotIn('thinkingOptionId', profile(e.loaded(), 'scout'))
+        e=self.env(thinkingOptionId=None); code, out=e.dry(); self.assertEqual((code, out['profiles']['scout']['action'], out['changes']), (0, 'noop', 0))
+
+    def test_policy_effort_change_from_null_to_set_still_writes_the_value(self):
+        e=self.env(); e.seed({'scout':{'thinkingOptionId':'high'}})
+        policy=json.loads(json.dumps(BASE)); policy['paseo_profiles']['scout']['expect']=['haiku','low']; pol=e.d/'p.json'; pol.write_text(json.dumps(policy))
+        code, out=e.apply('--policy', str(pol)); self.assertEqual((code, out['profiles']['scout']['action']), (0, 'update'))
+        self.assertEqual(profile(e.loaded(), 'scout')['thinkingOptionId'], 'low')
+
 class RestoreTests(unittest.TestCase):
     def setUp(self):
         self.e=Env(self, live_like(edited('l4-critical', modeId='plan'))); self.e.seed({'l4-critical':{'modeId':'plan'}})

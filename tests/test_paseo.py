@@ -129,6 +129,20 @@ class PaseoCheckTests(unittest.TestCase):
                 with contextlib.redirect_stdout(b): code=paseo.main(['check','--config',str(p)])
                 self.assertEqual(code, 2); self.assertIn('error', json.loads(b.getvalue()))
 
+def scout(**kw):
+    p={'id':'scout','name':'scout','provider':'claude','model':'claude-haiku-5-5','modeId':'plan'}; p.update(kw); return p
+
+class NullEffortTests(unittest.TestCase):
+    def test_stale_thinking_option_on_a_null_effort_profile_is_drift(self):
+        code, x=run(fixture(lambda ps: ps.append(scout(thinkingOptionId='high'))))
+        self.assertEqual((code, x['drift'], x['profiles']['scout']['status']), (1, True, 'drift'))
+        self.assertEqual(x['profiles']['scout']['differences'], [{'field':'thinkingOptionId','expected':None,'actual':'high'}])
+
+    def test_absent_or_null_thinking_option_is_fine(self):
+        for extra in ({}, {'thinkingOptionId':None}):
+            code, x=run(fixture(lambda ps: ps.append(scout(**extra))))
+            self.assertEqual((code, x['drift'], x['profiles']['scout']['status'], x['profiles']['scout']['differences']), (0, False, 'ok', []), extra)
+
 def ids(*xs): return {'models':[{'id':x,'label':x} for x in xs]}
 
 class PaseoModelsTests(unittest.TestCase):

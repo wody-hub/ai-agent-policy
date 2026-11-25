@@ -108,7 +108,7 @@
 | `provisional` | true면 라우터가 이름으로 안내하지 않고, `sync`는 `--include-provisional`일 때만 만든다. 없어도 드리프트가 아니다 |
 | `mode_id` | modeId 직접 지정 |
 
-선택자가 없는 프로필은 `provisional: true`이고 `expect`가 있어야 한다. 오케스트레이터 역할의 프로필은 `hosts.paseo.orchestrator_tools`(Claude) 도구만 쓴다. JSON의 중복 키는 거부된다. 위반은 모두 `routing_config_invalid`다. 파생 함수 `paseo_profile_spec(config, id)`가 돌려주는 값은 `provider`(모델의 도구), `model`(항상 정책의 정확한 id, 별칭 아님), `modeId`(`mode_id`, 없으면 그 프로필의 모든 `task_types`가 `review_mode.task_types`일 때 `review_mode[도구].modeId`, 아니면 `hosts.paseo.default_mode_id`), `thinkingOptionId`(effort, null이면 필드를 쓰지 않음), `notes`, `provisional`이다.
+선택자가 없는 프로필은 `provisional: true`이고 `expect`가 있어야 한다. 오케스트레이터 역할의 프로필은 `hosts.paseo.orchestrator_tools`(Claude) 도구만 쓴다. JSON의 중복 키는 거부된다. 위반은 모두 `routing_config_invalid`다. 파생 함수 `paseo_profile_spec(config, id)`가 돌려주는 값은 `provider`(모델의 도구), `model`(항상 정책의 정확한 id, 별칭 아님), `modeId`(`mode_id`, 없으면 그 프로필의 모든 `task_types`가 `review_mode.task_types`일 때 `review_mode[도구].modeId`, 아니면 `hosts.paseo.default_mode_id`), `thinkingOptionId`(effort, null이면 필드를 쓰지 않으며, 그런 프로필에 값이 남아 있으면 `check`가 드리프트로 보고하고 `sync`가 필드를 제거한다. 값이 null인 것은 미설정으로 본다), `notes`, `provisional`이다.
 
 임시 프로필: `scout`(haiku, effort 없음, `plan` 모드, 파일·심볼 정찰), `ui-verify`(Terra high), `l5-alt-astra`(Astra high, LEVEL 5 대체 — LEVEL 4 실패 계열이 Claude일 때). 모두 실제 프로필이 아직 없고 Sol을 기본으로 쓰는 프로필은 없다.
 
@@ -116,7 +116,7 @@
 
 `python3 -B -m ai_policy.paseo check [--config <config.json>] [--policy <model-routing.json>] [--model-catalog <models_cache.json>] [--paseo-models <list_models.json>]`
 
-종료 코드 0 = 드리프트 없음, 1 = 드리프트(관리 프로필의 `provider`/`model`/`modeId`/`thinkingOptionId` 불일치, 비임시 프로필 누락, 같은 id 중복), 2 = 입력 오류(`{"schema":1,"error":"<코드>"}`). `notes_differ`, 임시 프로필 누락(`missing_provisional`), `unmanaged_profiles`, Codex의 `newer_generation_available:<id>`·`catalog_stale_or_missing`, Claude의 `newer_alias_observed`·`--paseo-models`가 주는 `newer_available`은 정보일 뿐 종료 코드에 영향이 없다. 기본 `--config`는 `~/.paseo/config.json`이다. 파일을 쓰지 않고 Paseo를 호출하지 않는다.
+종료 코드 0 = 드리프트 없음, 1 = 드리프트(관리 프로필의 `provider`/`model`/`modeId`/`thinkingOptionId` 불일치(effort가 null인 프로필에 값이 남은 경우 포함), 비임시 프로필 누락, 같은 id 중복), 2 = 입력 오류(`{"schema":1,"error":"<코드>"}`). `notes_differ`, 임시 프로필 누락(`missing_provisional`), `unmanaged_profiles`, Codex의 `newer_generation_available:<id>`·`catalog_stale_or_missing`, Claude의 `newer_alias_observed`·`--paseo-models`가 주는 `newer_available`은 정보일 뿐 종료 코드에 영향이 없다. 기본 `--config`는 `~/.paseo/config.json`이다. 파일을 쓰지 않고 Paseo를 호출하지 않는다.
 
 ### 6.3 `sync`와 `--restore`
 
@@ -128,7 +128,7 @@
 4. **백업과 상태.** 적용 전에 원본 바이트를 `<state-dir>/backups/config.<UTC시각>.<sha8>.json`(파일 0600, 디렉터리 0700)에 복사한다. 내용은 출력하지 않는다. 마지막 적용값은 `<state-dir>/state.json`에 기록한다. 적용(`--plan-sha256`)할 때마다 쓴 프로필과 이미 정책과 같은(`noop`) 프로필을 기준선으로 기록하므로(충돌·거부·건너뛴 임시 프로필은 기록하지 않는다), 쓸 변경이 없는 적용도 설정 파일은 건드리지 않고 상태만 저장한다. 상태에는 대상 설정 파일의 절대경로가 들어가며 다른 파일의 상태(또는 경로가 없는 상태)는 `state_config_mismatch`로 거부한다(`--restore` 포함). 기본 `--state-dir`는 저장소 밖의 사용자별 경로 `${XDG_STATE_HOME:-~/.local/state}/ai-policy/paseo-sync/<설정 파일 절대경로 sha256의 앞 8자>`이며(상위 디렉터리도 0700으로 만든다, `XDG_STATE_HOME`이 절대경로가 아니면 무시), `--state-dir`로 바꿀 수 있다. 백업은 설정 파일 전체 사본이라 비밀 값이 들어 있을 수 있으므로 저장소에 두거나 커밋하지 않는다(`.gitignore`에도 `.local-artifacts/`를 넣었다). 상태·백업 디렉터리가 심볼릭 링크이거나 소유자·권한이 맞지 않으면 거부한다.
 5. **충돌.** 기존 프로필의 관리 필드 값이 정책 값과 다르고, 그 현재 값이 `sync`가 마지막으로 적용한 값(상태 기록)과도 다르면(사람이 고친 것으로 본다. 기록이 없으면 항상 해당) `conflict`이며 건드리지 않는다. 종료 코드 1. `--overwrite ID[,ID]`로 지정한 관리 프로필은 덮어쓴다(`overwritten: true`). 충돌은 다른 프로필의 적용을 막지 않는다.
 6. **거부(`--overwrite`로 해제 불가).** Codex 모델 id는 카탈로그가 오래됐거나 없어 `pinned_fallback`이면 바꾸지 않고(`refused:pinned_fallback`), 같은 계열 안에서 낮은 세대로 되돌리지 않는다(`refused:downgrade`: 같은 Codex 계열(luna·terra·sol·astra)의 낮은 `gpt-N` 세대, 같은 Claude 계열의 낮은 버전). 계열이 바뀌는 변경(예: Terra 6.1 → Luna 6, Sol 6.2 → Terra 6.1)은 세대 비교 대상이 아니므로 거부하지 않는다(사람이 고친 값이면 일반 충돌 규칙을 따른다). 종료 코드 1.
-7. **쓰는 범위.** 기존 프로필은 `provider`·`model`·`modeId`·`thinkingOptionId`만 갱신한다(`notes`·`name`·`features`·`options`·다른 프로필은 그대로). 없는 프로필은 `id`·`name`(=id)·관리 필드·`options: null`·`notes`로 만든다. 임시 프로필은 `--include-provisional`일 때만 만든다.
+7. **쓰는 범위.** 기존 프로필은 `provider`·`model`·`modeId`·`thinkingOptionId`만 갱신하며 effort가 null인 프로필의 남은 `thinkingOptionId`는 일반 충돌 규칙에 따라 제거한다(`notes`·`name`·`features`·`options`·다른 프로필은 그대로). 없는 프로필은 `id`·`name`(=id)·관리 필드·`options: null`·`notes`로 만든다. 임시 프로필은 `--include-provisional`일 때만 만든다.
 8. **복원.** `sync --restore <백업 경로>`도 드라이런이 기본이며 `--plan-sha256`으로 적용한다. 백업은 `<state-dir>/backups/` 바로 아래의 정규 파일·정해진 이름·내용 해시가 일치하는 것만 받고(경로 이탈·심볼릭 링크·비정규 파일 거부) 교체 전 현재 파일도 백업한다. `--include-provisional`·`--overwrite`와는 함께 쓰지 못한다.
 
 종료 코드: 0 = 성공(드라이런 포함), 1 = 충돌 또는 거부가 있음, 2 = 오류(`config_changed`, `plan_sha256_mismatch`, `config_format_drift`, `state_invalid`, `duplicate_profile_id`, `overwrite_unknown_id` 등).
