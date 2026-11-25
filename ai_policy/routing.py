@@ -10,7 +10,7 @@ from .bundle import PolicyError
 
 DEFAULT_CONFIG=Path(__file__).resolve().parent.parent/'policy'/'model-routing.json'
 REQUIRED=('models','codex_model_families','hosts','roles','levels','task_types','escalation','fallbacks','limits')
-PRESERVE={'retry','escalate','handoff_to_lead','blocked_no_available_model','retry_same_model_preserve_state'}
+PRESERVE={'retry','escalate','handoff_to_lead','blocked_no_available_model','blocked_no_independent_reviewer','retry_same_model_preserve_state'}
 
 def _bad():
     raise PolicyError('routing_config_invalid')
@@ -67,6 +67,7 @@ def load_config(path=None):
             _pick(c, e2)
             if c['models'][e2[0]]['tier'] in c['limits'].get('premium_tiers', ()): _bad()
     _validate_paseo(c)
+    _validate_cross_family_review(c)
     task_routes = c.get('orca_task_routes', {})
     if not isinstance(task_routes, dict): _bad()
     for key, entries in task_routes.items():
@@ -100,6 +101,15 @@ def _validate_paseo(c):
             if not isinstance(review.get(key, []), list) or any(t not in c['task_types'] for t in review.get(key, [])): _bad()
         for tool in ('claude','codex'):
             if tool in review and (not isinstance(review[tool], dict) or not isinstance(review[tool].get('modeId'), str)): _bad()
+
+def _validate_cross_family_review(c):
+    """cross_family_review (independence) and review_mode (write-block) must cover the same review task types."""
+    cfr, rm=c.get('cross_family_review'), c.get('review_mode')
+    if cfr is None and rm is None: return
+    if not isinstance(cfr, dict) or not isinstance(rm, dict): _bad()
+    types, blocking=cfr.get('task_types', ()), cfr.get('blocking_types', ())
+    if not isinstance(types, list) or not isinstance(blocking, list) or not set(blocking)<=set(types)<=set(c['task_types']): _bad()
+    if set(types)!=set(rm.get('task_types', ())): _bad()
 
 def _catalog_id(model, catalog):
     family=model.get('codex_family')
@@ -293,14 +303,25 @@ def route(config, *, host, level=None, task_type=None, role=None, failures=0, fa
                 same=[x[1] for x in (lv or {}).values() if isinstance(x, list) and x and x[0]==a]
                 return (a, same[0] if same and (same[0] is None or same[0] in config['models'][a]['efforts']) else _effort(config['models'][a], e), model_id, model_resolution)
             if a==palias: reasons.append('model_unavailable:'+a)
-    chosen=select(cands)
+    degraded=False
+    cfr=config.get('cross_family_review', {})
+    if implementer_family is not None and role is None and task_type in cfr.get('task_types', ()):
+        # Independent review: the reviewer family must differ from the implementer's; the fallback is flagged, or blocked for security/high-risk reviews.
+        chosen=select([c for c in cands if config['models'][c[0]]['tool']!=implementer_family])
+        if chosen is None and (high_risk or task_type in cfr.get('blocking_types', ())):
+            action='blocked_no_independent_reviewer'; reasons.append('independent_reviewer_required')
+        elif chosen is None:
+            chosen=select([c for c in cands if config['models'][c[0]]['tool']==implementer_family])
+            if chosen: degraded=True; reasons.append('degraded_independence')
+    else: chosen=select(cands)
     if chosen and chosen[0]!=palias: fallback_used=True
     out={'schema':1,'host':host,'level':cur,'level_name':lv['name'] if lv else None,'task_type':task_type,'role':role,
          'alias':None,'tool':None,'agent':None,'model':None,'model_resolution':None,'effort':None,'tier':None,'action':action,'escalated':escalated,
-         'fallback_used':fallback_used,'high_risk':high_risk,'human_gate':high_risk,'premium':False,'premium_requires_reason':False,'lateral':lateral is not None,'preserve_state':False,
+         'fallback_used':fallback_used,'high_risk':high_risk,'human_gate':high_risk,'premium':False,'premium_requires_reason':False,'lateral':lateral is not None,'degraded_independence':degraded,'preserve_state':False,
          'attempts_reset':bool(esc.get('attempt_count_resets_on_model_change', False)),'reasons':reasons,'handoff_fields':[],'orca_worker_args':[]}
     if chosen is None:
-        out['action']=action='blocked_no_available_model'; reasons.append('no_available_model')
+        if action!='blocked_no_independent_reviewer': action='blocked_no_available_model'; reasons.append('no_available_model')
+        out['action']=action
     else:
         a, e, model_id, model_resolution=chosen; m=config['models'][a]
         out.update(alias=a, tool=m['tool'], agent=m['agent'], model=model_id, model_resolution=model_resolution, effort=e, tier=m['tier'],
@@ -311,16 +332,23 @@ def route(config, *, host, level=None, task_type=None, role=None, failures=0, fa
         # Paseo has no worker-start arguments; the start configuration is create_agent fields.
         out['orca_worker_args']=[]
         out.update(paseo_create_agent=None, paseo_profile=None, paseo_review=None)
+        wb=_paseo_review(config, task_type, 'claude')
+        if chosen is None and action=='blocked_no_independent_reviewer' and wb and wb['write_block_required'] \
+                and not any(config['models'][a]['tool']=='claude' and _usable(config, host, a, available, _resolved_model(config['models'][a], model_catalog)[0], False) for a, _ in cands):
+            # Independence failed and the write-block (Claude plan-mode reviewer) cannot be met either: record both reasons.
+            reasons.append('review_write_block_requires_claude_plan')
         if chosen is not None and action!='handoff_to_lead':
             a, e, model_id, _=chosen; tool=config['models'][a]['tool']
             review=_paseo_review(config, task_type, tool)
             out['paseo_review']=review
             if review and review['write_block_required'] and tool=='codex':
                 # A write-blocking review needs a Claude plan-mode reviewer; Codex plan_mode is not enforced. Block instead of returning a runnable config.
-                out['action']=action='blocked_no_available_model'
+                # With an implementer_family the same block is reported as the independence block; the Claude reviewer would also fail independence.
+                out['action']=action='blocked_no_independent_reviewer' if implementer_family is not None else 'blocked_no_available_model'
                 reasons.append('review_write_block_requires_claude_plan')
+                if implementer_family is not None: reasons.append('independent_reviewer_required')
                 for k in ('alias','tool','agent','model','model_resolution','effort','tier'): out[k]=None
-                out['premium']=out['premium_requires_reason']=False
+                out['premium']=out['premium_requires_reason']=out['degraded_independence']=False
             else:
                 out['paseo_create_agent']=_paseo_start_config(config, tool, model_id, e, review)
                 profile=_paseo_profile(config, role, cur, task_type, a, e)
@@ -368,6 +396,6 @@ def main(argv=None):
     except PolicyError as e:
         print(json.dumps({'schema':1,'error':str(e)}, sort_keys=True)); return 30
     print(json.dumps(r, sort_keys=True))
-    return {'blocked_no_available_model':40,'handoff_to_lead':41}.get(r['action'], 0)
+    return {'blocked_no_available_model':40,'blocked_no_independent_reviewer':40,'handoff_to_lead':41}.get(r['action'], 0)
 
 if __name__=='__main__': raise SystemExit(main())

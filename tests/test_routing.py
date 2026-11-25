@@ -215,6 +215,8 @@ class RoutingTests(unittest.TestCase):
         bad(lambda c: c['models']['luna'].update(codex_family='../luna'))
         bad(lambda c: c.pop('fallbacks'))
         bad(lambda c: c.update(schema=2))
+        bad(lambda c: c['cross_family_review'].update(task_types=['nope']))
+        bad(lambda c: c['cross_family_review'].update(blocking_types=['docs']))
 
     def test_cli(self):
         def run(*a):
@@ -373,5 +375,128 @@ class CliNewInputsTests(unittest.TestCase):
         self.assertEqual((code, x['action']), (40, 'blocked_no_available_model'))
         self.assertEqual(run('--host','paseo','--level','4','--failed-family','gemini',*nc), (30, {'schema':1,'error':'unknown_failed_family'}))
         self.assertEqual(run('--host','paseo','--task-type','review','--implementer-family','gemini',*nc), (30, {'schema':1,'error':'unknown_implementer_family'}))
+
+class CrossFamilyReviewTests(unittest.TestCase):
+    def test_reviewer_family_differs_from_implementer(self):
+        for host in ('orca','paseo'):
+            x=r(host=host, task_type='review', implementer_family='claude'); self.assertEqual((x['tool'], x['degraded_independence']), ('codex', False))
+            x=r(host=host, task_type='review', implementer_family='codex'); self.assertEqual((x['tool'], x['degraded_independence']), ('claude', False))
+        self.assertEqual(pick(r(host='orca', task_type='code_review_claude', implementer_family='claude')), ('terra','high'))
+        self.assertEqual(r(host='orca', task_type='security_review', implementer_family='claude')['tool'], 'codex')
+        self.assertEqual(r(host='orca', task_type='security_review', implementer_family='codex')['tool'], 'claude')
+        # no implementer_family: behavior unchanged
+        self.assertEqual(r(host='orca', task_type='review')['degraded_independence'], False)
+        self.assertEqual(pick(r(host='orca', task_type='review')), ('sonnet','medium'))
+
+    def test_degraded_independence_for_ordinary_reviews(self):
+        x=r(host='orca', task_type='review', implementer_family='claude', available=['sonnet'])
+        self.assertEqual((x['action'], x['alias'], x['degraded_independence']), ('run','sonnet',True)); self.assertIn('degraded_independence', x['reasons'])
+        x=r(host='claude', task_type='review', implementer_family='claude')   # claude host: no Codex tool at all
+        self.assertEqual((x['action'], x['tool'], x['degraded_independence']), ('run','claude',True))
+        x=r(host='orca', task_type='important_review', implementer_family='codex', available=['terra'])   # level 3 candidates: sonnet, terra
+        self.assertTrue(x['degraded_independence'] and x['alias']=='terra')
+        x=r(host='orca', task_type='important_review', implementer_family='codex', available=['luna'])  # not a candidate at this level
+        self.assertEqual((x['action'], x['degraded_independence']), ('blocked_no_available_model', False))
+        # Paseo: the ordinary review proceeds degraded and still carries its review start configuration
+        x=r(host='paseo', task_type='code_review_claude', implementer_family='codex', available=['luna'])
+        self.assertEqual((x['action'], x['tool'], x['degraded_independence']), ('run', 'codex', True))
+        self.assertIsNotNone(x['paseo_create_agent']); self.assertNotIn('independent_reviewer_required', x['reasons'])
+        x=r(host='paseo', task_type='review', implementer_family='claude', available=['sonnet'])
+        self.assertEqual((x['action'], x['tool'], x['degraded_independence'], x['paseo_create_agent']['settings']['modeId']), ('run', 'claude', True, 'plan'))
+
+    def test_security_and_high_risk_reviews_are_blocked_without_independence(self):
+        x=r(host='orca', task_type='security_review', implementer_family='claude', available=['sonnet'])
+        self.assertEqual((x['action'], x['alias'], x['degraded_independence'], x['orca_worker_args']), ('blocked_no_independent_reviewer', None, False, []))
+        self.assertTrue(x['preserve_state']); self.assertIn('independent_reviewer_required', x['reasons'])
+        self.assertEqual(r(host='claude', task_type='security_review', implementer_family='claude')['action'], 'blocked_no_independent_reviewer')
+        self.assertEqual(r(host='codex', task_type='security_review', implementer_family='codex')['action'], 'blocked_no_independent_reviewer')
+        # nothing usable at all stays the generic block
+        self.assertEqual(r(host='orca', task_type='review', implementer_family='claude', available=[])['action'], 'blocked_no_available_model')
+
+    def test_existing_code_review_codex_block_is_kept(self):
+        self.assertEqual(r(host='orca', task_type='code_review_codex', available=['luna'])['action'], 'blocked_no_available_model')
+        self.assertEqual(r(host='orca', task_type='code_review_codex', implementer_family='codex', available=['luna'])['action'], 'blocked_no_available_model')
+        self.assertEqual(pick(r(host='orca', task_type='code_review_codex', implementer_family='codex')), ('sonnet','medium'))
+
+    def test_bad_implementer_family_and_non_review_types_ignored(self):
+        with self.assertRaisesRegex(PolicyError, 'unknown_implementer_family'): r(host='orca', task_type='review', implementer_family='gemini')
+        x=r(host='orca', task_type='docs', implementer_family='codex'); self.assertEqual((pick(x), x['degraded_independence']), (('luna','medium'), False))
+        x=r(host='orca', role='lookup', implementer_family='codex'); self.assertFalse(x['degraded_independence'])
+
+    def test_degraded_independence_key_is_always_present(self):
+        for kw in ({'task_type':'docs'},{'level':4},{'role':'lookup'},{'task_type':'review','implementer_family':'claude'}):
+            self.assertIs(r(host='paseo', **kw)['degraded_independence'], False)
+
+    def test_cross_family_and_write_block_types_are_kept_in_sync(self):
+        self.assertEqual(set(C['cross_family_review']['task_types']), set(C['review_mode']['task_types']))
+        base=json.loads(routing.DEFAULT_CONFIG.read_text())
+        def bad(mut):
+            c=json.loads(json.dumps(base)); mut(c)
+            with tempfile.TemporaryDirectory() as d:
+                p=Path(d)/'c.json'; p.write_text(json.dumps(c))
+                with self.assertRaises(PolicyError) as cm: routing.load_config(p)
+                self.assertEqual(str(cm.exception), 'routing_config_invalid')
+        bad(lambda c: c['review_mode'].update(task_types=[t for t in c['review_mode']['task_types'] if t!='important_review']))
+        bad(lambda c: c['cross_family_review'].update(task_types=[t for t in c['cross_family_review']['task_types'] if t!='review'], blocking_types=['security_review']))
+        bad(lambda c: c.pop('cross_family_review'))
+        bad(lambda c: c.pop('review_mode'))
+
+class PaseoSecurityReviewIndependenceTests(unittest.TestCase):
+    """security_review on Paseo combines independence (MINE) with the write-block (THEIRS); fail-closed by decision D1."""
+    def sr(self, impl, available=None): return r(host='paseo', task_type='security_review', implementer_family=impl, available=available)
+
+    def assert_blocked(self, x):
+        self.assertEqual(x['action'], 'blocked_no_independent_reviewer')
+        self.assertIsNone(x['paseo_create_agent']); self.assertIsNone(x['paseo_profile'])
+        for k in ('alias','tool','agent','model','effort','tier'): self.assertIsNone(x[k])
+        self.assertEqual(x['orca_worker_args'], [])
+        self.assertFalse(x['premium'] or x['premium_requires_reason'] or x['degraded_independence']); self.assertTrue(x['preserve_state'])
+
+    def test_codex_implementer_with_claude_available_runs_claude_plan_reviewer(self):
+        for avail in (None, ['sonnet','luna'], ['sonnet']):
+            x=self.sr('codex', avail)
+            self.assertEqual((x['action'], pick(x), x['paseo_create_agent']['settings']['modeId'], x['degraded_independence']), ('run', ('sonnet','high'), 'plan', False))
+            self.assertTrue(x['paseo_review']['write_block_required'])
+            self.assertNotIn('review_write_block_requires_claude_plan', x['reasons'])
+
+    def test_codex_implementer_with_only_codex_is_blocked_with_both_reasons(self):
+        x=self.sr('codex', ['luna'])
+        self.assert_blocked(x)
+        self.assertIn('independent_reviewer_required', x['reasons']); self.assertIn('review_write_block_requires_claude_plan', x['reasons'])
+        self.assertNotIn('degraded_independence', x['reasons'])
+
+    def test_claude_implementer_with_only_claude_is_blocked(self):
+        x=self.sr('claude', ['sonnet'])
+        self.assert_blocked(x); self.assertIn('independent_reviewer_required', x['reasons'])
+        self.assertNotIn('review_write_block_requires_claude_plan', x['reasons'])
+
+    def test_claude_implementer_with_both_families_is_blocked(self):
+        for avail in (None, ['sonnet','luna']):
+            x=self.sr('claude', avail)
+            self.assert_blocked(x)
+            self.assertIn('review_write_block_requires_claude_plan', x['reasons']); self.assertIn('independent_reviewer_required', x['reasons'])
+
+    def test_important_review_joins_review_mode(self):
+        # review_mode.task_types now equals cross_family_review.task_types, so important_review gets the Claude plan-mode start configuration.
+        x=r(host='paseo', task_type='important_review')
+        self.assertEqual((pick(x), x['paseo_create_agent']['settings']['modeId'], x['paseo_review']['write_block_required']), (('sonnet','high'), 'plan', False))
+
+    def test_without_implementer_family_the_write_block_behaviour_is_unchanged(self):
+        x=r(host='paseo', task_type='security_review', available=['luna'])
+        self.assertEqual(x['action'], 'blocked_no_available_model'); self.assertNotIn('independent_reviewer_required', x['reasons'])
+        self.assertEqual(r(host='paseo', task_type='security_review')['paseo_create_agent']['settings']['modeId'], 'plan')
+
+    def test_cli_exit_code_and_state_preserved(self):
+        def run(*a):
+            b=io.StringIO()
+            with contextlib.redirect_stdout(b): code=routing.main(list(a))
+            return code, json.loads(b.getvalue())
+        nc=('--model-catalog','/nonexistent')
+        code, x=run('--host','paseo','--task-type','security_review','--implementer-family','claude',*nc)
+        self.assertEqual((code, x['action'], x['preserve_state']), (40, 'blocked_no_independent_reviewer', True))
+        code, x=run('--host','paseo','--task-type','security_review','--implementer-family','codex',*nc)
+        self.assertEqual((code, x['action'], x['paseo_create_agent']['settings']['modeId']), (0, 'run', 'plan'))
+        code, x=run('--host','orca','--task-type','security_review','--implementer-family','claude','--available','sonnet',*nc)
+        self.assertEqual((code, x['action']), (40, 'blocked_no_independent_reviewer'))
 
 if __name__=='__main__': unittest.main()

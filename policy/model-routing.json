@@ -104,6 +104,11 @@
     "docs": [["luna", "medium"], ["sonnet", "medium"]],
     "log_summary": [["luna", "low"]]
   },
+  "cross_family_review": {
+    "task_types": ["review", "code_review_codex", "code_review_claude", "important_review", "important_review_codex", "security_review"],
+    "blocking_types": ["security_review"],
+    "note": "With an implementer_family the reviewer must be the other family. If it is unavailable ordinary reviews proceed with degraded_independence=true; blocking_types and high-risk reviews are blocked. task_types must equal review_mode.task_types (validated by the loader)."
+  },
   "paseo_profiles_note": "Names only. The real provider/model/mode/thinking of each profile lives in the user's Paseo configuration (list_profiles). expect is the (alias, effort) this map assumes for a task_types profile; role/level profiles expect the host entry. A router result that differs from the expectation reports no profile and the Owner configures create_agent directly.",
   "paseo_profiles": {
     "root-orchestrator":   {"role": "root_orchestrator"},
@@ -118,7 +123,7 @@
     "lookup":              {"role": "lookup"}
   },
   "review_mode": {
-    "task_types": ["review", "code_review_codex", "important_review_codex", "code_review_claude", "security_review"],
+    "task_types": ["review", "code_review_codex", "code_review_claude", "important_review", "important_review_codex", "security_review"],
     "write_block_required_task_types": ["security_review"],
     "claude": {"modeId": "plan", "enforced": null, "note": "Described by Paseo as analysis without executing tools or edits; not verified by a write attempt."},
     "codex": {"modeId": "auto", "features": {"plan_mode": true}, "enforced": false, "evidence": "git_status_diff_unchanged", "note": "plan_mode is an instruction-level limit, not a tool or sandbox block. Check that git status and the diff are unchanged before and after the review."}
