@@ -1,4 +1,4 @@
-# Orca → Paseo 정책 이전 설계 (paseo-policy-migration 1단계)
+# Orca → Paseo 정책 이전 설계 (paseo-policy-migration 1단계, 2B 반영)
 
 작성 2026-11-25. 상태: 사용자 검토 대기 초안(2026-11-25 보정 반영, Q3 시험 결과 반영). 브랜치 `docs/paseo-policy-source`(base main @ 91a473a).
 
@@ -9,7 +9,7 @@
 - **Q1~Q5 «결정됨»**(5절): Q1 병행기 후 퇴역(병행기 정의·종료 기준·확인 방법 명문화), Q2 guard Paseo 모드(순서 조건 3단계, 2단계 L4 검토 대상), Q4 정책 규칙 + Owner 자식 목록 점검(사실 보강), Q5 데몬 현 상태 명문화 + 시작 시 점검 항목. **Q3는 시험 결과로 «확정»**: Codex 리뷰어에 `plan_mode`를 권장하되 지침 수준 보호일 뿐 «강제된다»고 주장하지 않으며, 리뷰 전후 `git status`/diff 무변경 검사를 필수 증거로 한다. 쓰기 차단이 필요한 중요 리뷰는 Claude `plan` 모드 리뷰어. 프로필 변경은 제안 P6(사용자 승인 후).
 - **F1 반영**: Paseo 데몬이 모든 에이전트에 주입하는 조율 규칙(`daemon.appendSystemPrompt`)을 «데몬이 이미 강제하는 기본 프로토콜»로 인용하고, 별도 보고 형식을 만들지 않으며 정책 고유 항목은 그 위에 얹는다(common §5, lifecycle §7).
 - **F2 반영**: Codex 기본 권한(auto) 에이전트는 Paseo worktree에서 `git add/commit`이 샌드박스에 막힌다. «Codex Worker는 commit하지 않는다» 규칙과 문서 담당 commit 규칙 정리를 추가했다(common §3, lifecycle §5·§7). 7절 미확인 3·4번과 연결.
-- **F3 반영**: `daemon.relay.enabled=true`, 비밀번호 계열 키 없음, CORS 기본값. 임의 변경 없이 «사용자 확인 필요»로 기록하고 relay 사용을 Human Gate(Q9)로 올렸다.
+- **F3 반영**: `daemon.relay.enabled=true`, 비밀번호 계열 키 없음, CORS 기본값. 임의 변경 없이 «사용자 확인 필요»로 기록하고 relay 사용을 Human Gate(Q9)로 올렸다. → 2026-11-25 2B에서 **relay는 사용자가 의도한 설정(유지)**으로 갱신했다(아래 «2B 반영 이력»).
 - **7절**: 확인된 항목을 «확인됨(일자·방법)»으로 옮기고 새 미확인을 추가했다.
 - **변경 파일**: `policy/paseo-common.md`, `docs/paseo-agent-lifecycle.md`, `docs/paseo-model-routing.md`, 이 문서.
 
@@ -21,6 +21,31 @@
 - 이 문서: 개념 대응, MUST-PRESERVE 판정, 충돌 처리, 열린 질문, 후속 영향 파일
 
 입력: `.local-artifacts/paseo-migration/evidence/paseo-technical-research.md`(Paseo v0.17.4 조사, 미설치 상태 조사), `custom-features-and-policies.md`(6절 MUST-PRESERVE 22개, 7절 C1~C15), 이 worktree의 orca 정책 파일, 원본 체크아웃의 미커밋 `docs/orca-worker-lifecycle.md`·`orca-project-setup.md`(worktree readiness 절, 읽기만 함), 2026-11-25 이 세션의 Paseo `list_profiles` 결과와 MCP 도구 스키마.
+
+## 2026-11-25 2B 반영 이력
+
+2단계 «GH 프로젝트»보다 앞서 이 저장소의 나머지 파일을 Paseo 기준으로 보강했다(설계 6절 «3단계: 이 저장소» 목록 중 저장소 파일 부분). 전역 설정(`~/.claude`, `~/.codex`, `~/.paseo`), GH 프로젝트, gh-docs는 수정하지 않았고 설치기를 실제 홈에서 실행하지 않았다.
+
+**사용자 결정 반영**
+- **Hermes 미사용.** `policy/paseo-common.md` §2의 Hermes 역할 분담 문단을 «Hermes 미사용(사용자 결정 2026-11-25)»으로 바꿨다(승인 증거·재승인·메시지≠승인은 사용자 직접 승인으로 유지). MUST-PRESERVE #3(유지→변경, 합계 정정), 개념 대응표의 Hermes 행(폐기), C4·C5(해소), Q8(결정됨)을 갱신했다.
+- **relay 유지.** F3·U-14·Q9 문구를 «relay는 사용자가 의도한 설정이며 유지, 변경은 Human Gate, 비밀번호 필요 여부만 사용자 결정 남음»으로 갱신했다(common §6·§7, lifecycle §10).
+- **Q6~Q10 «결정됨(권장안 수용)».** Q6 기존 `paseo` 스킬 + 정책 문서 참조. Q7 Coordinator Sonnet high를 `model-routing.json` 1.6.0에 반영(P2). Q9 Paseo 특유 행위(relay 켜기·플러그인 설치·`archive_workspace`·schedule 생성·권한 모드 상향)를 Human Gate로 추가. Q10 Owner 원장은 Task 로컬 기록 폴더. (Q8만 권장안과 달리 «Hermes 미사용».)
+
+**구현한 것**
+- `policy/model-routing.json` 1.5.0 → 1.6.0: 제안 P1(host `paseo`), P2(Paseo 호스트 Root·Coordinator = Sonnet high, 대체 없음, Claude만), P3(`paseo_profiles` 이름 대응), P4(`review_mode`: claude `plan`, codex `plan_mode` + `enforced: false`). `changelog` 추가. Orca·claude·codex 호스트 값·selector·limits 불변(대표 입력 141건 출력 전후 동일).
+- `ai_policy/routing.py`: `--host paseo`(`paseo_create_agent`·`paseo_profile`·`paseo_review`, `orca_worker_args` 비움, exit 40·41 규약 유지, `--resolve-family`도 Paseo 형식 지원). 설정 검증에 Paseo 블록 추가.
+- `ai_policy/context.py`: Paseo 맥락 증거 판정 `decide_paseo`. 증거는 부모 배정 메시지와 에이전트 자신의 부모 라벨 `paseo.parent-agent-id`이며 둘 다 있어야 active. `PASEO_AGENT_ID` 환경 변수는 힌트일 뿐 증거가 아니다(힌트만 있으면 ambiguous `origin_unverified`). 하위 프로세스 CLI는 두 사실을 읽을 수 없으므로 `detect/context --flavor paseo`는 active가 되지 않는다(호스트 통합이 증거를 구성해 함수를 호출하는 구조, 아직 통합 없음). Orca 감지 코드는 변경하지 않았다.
+- `ai_policy/bundle.py`·`install.py`·`__main__.py`: bundle `flavor`(`orca` 기본, `paseo`). Paseo 번들 `policy/paseo-bundle.json`(`paseo-common.md`, `adapters/paseo-claude.md`·`paseo-codex.md`, 같은 오프라인 코드). 설치 경로 `.config/ai-agent-policy/paseo`, 마커 `ai-agent-policy:paseo-adapter:`로 Orca와 분리되어 한 홈에 공존한다. 명시 홈·dry-run·`--plan-sha256`·백업/복원 규약 동일. `--flavor` 옵션 기본값 `orca`로 기존 명령과 Orca 번들 호환 유지(Orca plan digest 형식도 동일).
+- 문서: README(전략 절 Paseo, Orca 병행기 보관), `paseo-project-setup.md` 신규, `project-task-policy-setup.md` POLICY F, 두 전역 설치용 프롬프트(저장소 파일만), 보관 배너(`orca-project-setup.md`, `docs/orca-*.md`, `docs/reproducible-orca-environment.md`, `policy/orca-common.md`), `docs/reproducible-paseo-environment.md` 신규, routing 문서 5절 반영 상태, 이 절.
+
+**구현하지 않은 것(이유)**
+- P5 Codex 고정 ID(`gpt-6.2-*` 차이): 원인 미확인(U-10).
+- P6 사용자 프로필 `plan_mode` 설정: 이 단계에서는 문서만. `~/.paseo/config.json` 미수정, 사용자 승인 후 반영.
+- Orca 호스트 `project_coordinator` 대체 목록에 Sonnet high 추가: Orca 출력 불변 조건과 충돌하여 Paseo 호스트에만 반영.
+- 호스트 통합(Paseo 증거를 읽어 `decide_paseo`를 호출하는 경로), Paseo native hook: 없음. 어댑터는 Orca처럼 «검증된 로컬 detector가 active일 때만» 적용하는 안내이며 hook을 설정하지 않는다.
+- guard의 Paseo 모드(2C), GH 프로젝트(2단계), 전역 설정·Orca hook·statusLine 정리(3단계)와 «보관» 확정(병행기 종료 확인 후).
+- `project-task-policy-setup.md`의 POLICY F 밖 Orca 용어 전면 이전과 버전 번호 상향(사용자 결정). 두 전역 설치용 프롬프트의 전략 버전(1.4.0)도 올리지 않았다.
+- 실제 Paseo `list_profiles`·`list_models`와 라우터 출력의 대조: 미실행(이 단계 Worker에서 확인하지 않음).
 
 ## 1. 설계 결정 요약
 
@@ -74,7 +99,7 @@
 | 읽기 전용 리뷰어(Read/Grep/Glob) | Claude `plan` 모드 / Codex는 `plan_mode` 권장(지침 수준, 강제 아님) + 리뷰 전후 무변경 검사 필수 | 변경 | Q3 확정(2026-11-25 시험), 프로필 변경은 P6 |
 | 구현 Worker의 보고 형식 | 데몬 주입 프로토콜(`PROJECT_DONE:`/`BLOCKED:`/`NEED_APPROVAL:` + 증거) + 정책 고유 항목 | 변경 | F1. Codex Worker는 Paseo 도구가 없어 최종 응답으로 보고 |
 | Worker의 commit(문서 담당 포함) | Claude Worker 또는 Owner. Codex Worker는 diff 보고만 | 변경 | F2 |
-| Hermes ↔ Orca Coordinator 역할 분담 | Hermes ↔ Paseo Root/Coordinator | 유지 | 명칭만 |
+| Hermes ↔ Orca Coordinator 역할 분담 | 대상 없음(Hermes 미사용, 사용자 결정 2026-11-25). 사용자 요청 명확화·우선순위·Task별 승인·보고는 Root가 사용자와 직접 한다 | 폐기 | Q8 결정됨 |
 
 ## 3. MUST-PRESERVE 22개 판정
 
@@ -84,7 +109,7 @@
 |---|---|---|---|---|
 | 1 | Main/Controller 코드 미수정, Worker 실행, 재위임 금지, 단일 Owner, 소규모 겸임 예외 | 변경 | Owner=부모 에이전트. Codex는 Worker 전용. 재위임 차단은 정책 규칙 + Owner의 자식 목록 점검(Q4). 재위임 위험은 Claude Worker에 한정(Codex는 Paseo 도구 없음). 보조 설정은 보안 경계 아님 | common §2 |
 | 2 | 설치 정책+실제 작업 맥락이 있을 때만 적용, 환경 변수·CLI만으로 판정 금지 | 변경 | 증거 종류를 Paseo 배정 메시지·부모 라벨로 교체. 원칙 동일 | common §1 |
-| 3 | Hermes 역할 분담·승인 증거·재승인·메시지≠승인 | 유지 | Orca Coordinator → Paseo Root/Coordinator. 권한 요청 승인·완료 알림도 사용자 승인이 아님을 추가 | common §2 |
+| 3 | 승인 증거·재승인·메시지≠승인(Hermes 역할 분담 부분은 Hermes 미사용으로 정리) | 변경 | Hermes 역할 분담은 폐기(Hermes 미사용, 사용자 결정 2026-11-25). 승인 증거·재승인·메시지≠승인은 유지하되 사용자가 직접 승인하는 주체가 된다. 권한 요청 승인·완료 알림도 사용자 승인이 아님을 추가 | common §2 |
 | 4 | 비용 우선·검증 생략 금지, 기본/프리미엄/최후 수단, 정본 json, 실제 모델은 런타임 증거로 | 변경 | 프로필 계층 추가. 오케스트레이터 기본 Sonnet high(Codex 제외). 실제 모델 확인 경로 [미확인] | routing §1–3 |
 | 5 | 승격 2회, 비모델 3회, 즉시 L4, 구조화 인계, 기본 복귀 | 유지 | Owner 원장으로 계산. Paseo 특유 비모델 실패 분류 추가 | routing §4 |
 | 6 | 동시 3 / 프리미엄 1, 관련 파일만, 중복 금지, 끝난 에이전트 정리 | 변경 | 런타임 상한 없음 → Root 계수. 정리는 `archive_agent` | routing §4, lifecycle §5–6 |
@@ -98,14 +123,14 @@
 | 14 | 운영 반영 완료 정의 | 유지 | 변경 없음 | common §7 |
 | 15 | 범위 지정 대기, 정산 후 release, release 상태 기록, 활성·불확실·사용자 소유 정리 금지, consumer_fenced 재바인딩 | 변경 | 알림 기반 대기·`archive_agent`. `consumer_fenced`·`run-use`는 폐기하고 Owner 장애 절차로 대체 | lifecycle §3, §5, §8 |
 | 16 | 고위험은 처음부터 Opus/Sol high 분석·검토, 라우팅≠권한 | 유지 | | common §6 |
-| 17 | Human Gate 표 | 유지 | 표 자체는 프로젝트 문서 그대로. Paseo 특유 게이트 행위 추가 제안: relay 사용 포함(Q9, 사용자 결정 대기) | common §7 |
+| 17 | Human Gate 표 | 유지 | 표 자체는 프로젝트 문서 그대로. Paseo 특유 게이트 행위 추가: relay 사용 포함(Q9 결정됨, 권장안 수용) | common §7 |
 | 18 | 권한 확대 금지, 유료 크레딧 자동 승인 금지 | 유지 | `bypassPermissions`/`full-access` 기본 금지, 권한 요청 승인 범위 규정 추가 | common §6 |
 | 19 | 비밀 취급 | 유지 | 데몬 환경 변수 전파 주의 추가(값 미기록) | common §6, lifecycle §10 |
 | 20 | 장시간 프로세스·로그 규칙 | 유지 | 배정 계약·보고 형식에 포함 | lifecycle §2.3, §7 |
 | 21 | Kanban 규칙 | 유지 | 변경 없음. 한글 locale(#3513) 위험 점검 추가 | lifecycle §10 |
 | 22 | 기본 스킬 경로 표 | 변경 | "구현 조율" 행의 "Orca 작업이면 orca-orchestrator"를 Paseo 작업용 경로로 교체 필요(3단계, 대상 스킬 결정은 Q6) | §6 |
 
-합계: **유지 14, 변경 8, 폐기 0.** 하위 요소 중 폐기: `run-create`, `consumer_fenced`, `run-use`/`run-current`, `--takeover-legacy`, Orca parent workspace, `--no-parent` 금지 규칙(모두 Paseo에 대상이 없음).
+합계: **유지 13, 변경 9, 폐기 0**(2B에서 #3을 유지→변경으로 정정: Hermes 역할 분담 폐기). 하위 요소 중 폐기: `run-create`, `consumer_fenced`, `run-use`/`run-current`, `--takeover-legacy`, Orca parent workspace, `--no-parent` 금지 규칙(모두 Paseo에 대상이 없음).
 
 ## 4. 충돌 C1~C15 처리
 
@@ -114,8 +139,8 @@
 | C1 | Sonnet effort: 전역 문서 medium vs settings.json high | 보류 | 전역 Claude 설정 단계(3단계)에서 결정. Paseo 오케스트레이터 high는 프로필로 별도 관리되므로 이 초안과 충돌하지 않음 |
 | C2 | 버전 드리프트(전역 1.4.0, 라우팅 1.5.0, GH v1.0.4/1.0.5) | 반영(부분) | Paseo 본문은 별도 버전 0.1.0-draft. GH 재설치는 2단계 |
 | C3 | GH MODEL_ROUTING(v1.0.4)이 1.5.0과 다름 | 보류 | "프로젝트 명시 지정 우선" 규칙 때문에 GH 구버전 값이 이긴다. 2단계에서 GH 문서를 Paseo 기준으로 재생성해야 함(Q7) |
-| C4 | Hermes coordinator Sol medium, Hermes 기본 Opus minimal | 보류 | Hermes 설정은 범위 밖. Hermes 계속 사용 여부 확인 필요(Q8) |
-| C5 | Kanban 마크다운 vs Hermes Kanban | 보류 | Paseo 이전과 무관. 기존 정책 유지 |
+| C4 | Hermes coordinator Sol medium, Hermes 기본 Opus minimal | 해소 | Hermes 미사용(사용자 결정 2026-11-25, Q8). 이 저장소 정책에 Hermes 설정 의존이 없다. Hermes 자체 설정·플러그인 정리는 범위 밖(영향 목록에만 기록) |
+| C5 | Kanban 마크다운 vs Hermes Kanban | 해소 | Hermes 미사용이므로 마크다운 Kanban(전역 지침의 태스크 관리 규칙)이 유일한 원본. 기존 정책 유지 |
 | C6 | 볼트 Orca README 낡음 | 보류 | 3단계 영향 목록에 포함 |
 | C7 | Codex/Claude 전역 문서 병렬 사본 | 반영(설계) | 3단계에서 두 전역 문서의 Paseo 단락을 이 저장소 한 원본에서 생성하도록 제안 |
 | C8 | ai-guideline-kit 중복 사본 | 보류 | 범위 밖 |
@@ -129,7 +154,7 @@
 
 ## 5. 결정 사항과 열린 질문
 
-사용자 확정(2026-11-25): Q1·Q2·Q4·Q5는 «결정됨», Q3는 방향 확정 후 같은 날 시험 결과를 받아 «확정»했다. 나머지(Q6~Q10)는 열린 질문이다.
+사용자 확정(2026-11-25): Q1·Q2·Q4·Q5는 «결정됨», Q3는 방향 확정 후 같은 날 시험 결과를 받아 «확정»했다. Q6~Q10도 같은 날 «결정됨»(2B 반영, 아래).
 
 **Q1. Orca 정책 퇴역 시점 — «결정됨»: 병행기 후 퇴역**
 - **병행기의 정의**: 결정 시점에 기존 Orca가 소유한 진행 중 Run·worktree만 Orca 규칙(`orca-common.md`, `orca-worker-lifecycle.md`)으로 마무리한다. 새 Task는 즉시 Paseo 규칙을 쓴다. 이미 Orca가 소유한 Run을 Paseo로 옮기거나 새 Run을 Orca에 추가하지 않는다.
@@ -163,13 +188,13 @@
 - 데몬 방식을 바꾸는 권고((a) CLI 데몬 재기동, (b) `keepRunningAfterQuit`)는 정책으로 채택하지 않는다. 점검 결과가 달라지면 사용자에게 보고한다.
 - 기존 전역 정책의 `ANTHROPIC_BASE_URL` 프록시 설정 유지 여부는 이번 관측(에이전트 셸에 없음)으로 결정되지 않는다. 필요해질 때 사용자 결정이다.
 
-그 밖의 질문:
+그 밖의 질문 — **Q6~Q10은 2026-11-25 사용자 결정으로 «결정됨(권장안 수용)»**이다(Q8은 권장안과 다른 결정: Hermes 미사용):
 
-- Q6. 기본 스킬 경로 표의 Paseo 조율 스킬: `paseo` 스킬 사용 vs 이 정책 전용 신규 스킬. 권장: 기존 `paseo` 스킬 + 이 문서 참조.
-- Q7. Coordinator Sonnet high를 `model-routing.json`에 반영(제안 P2)할지. 권장: 반영(사용자 승인 이미 있음).
-- Q8. Hermes를 계속 사용자 업무 관리자로 쓸지. 쓰지 않으면 MUST-PRESERVE 3의 Hermes 문구를 조건부로 남긴다.
-- Q9. Paseo 특유 행위의 Human Gate 추가 여부: **relay 사용 여부**, 플러그인 설치, `archive_workspace`, schedule 생성(비용 발생), 권한 모드 상향. 권장: 공통 게이트로 추가. 현재 상태(F3): `daemon.relay.enabled=true`이며 `daemon.*`에 비밀번호 계열 키가 없고 `cors.allowedOrigins`는 기본값이다(2026-11-25 설정 파일 읽기, 값 출력 없음). 조사 문서(`paseo-technical-research.md` 2절·Top risks)는 «relay는 끄고 비밀번호를 설정»을 권고했다. **켜진 의도는 미확인이며 사용자 확인 필요**하다. 정책은 임의로 끄거나 설정을 바꾸라고 쓰지 않고, 사용자 결정 전까지 현 상태를 기록·보고만 한다.
-- Q10. Owner 원장 위치: Task 로컬 기록 폴더(`LOCAL_ARTIFACT_ROOT/<TASK_ID>/`) vs Paseo 라벨만. 권장: 로컬 기록(라벨 필터가 없음).
+- Q6 — **결정됨(권장안 수용).** 기본 스킬 경로 표의 Paseo 조율 스킬은 기존 `paseo` 스킬 + 이 정책 문서 참조다. 정책 전용 신규 스킬은 만들지 않는다. 전역 기본 경로 표 수정은 3단계(사용자 승인 후).
+- Q7 — **결정됨(권장안 수용), 반영 완료.** Coordinator Sonnet high를 `model-routing.json` 1.6.0의 Paseo 호스트에 반영했다(제안 P2). Orca 호스트 값은 그대로다.
+- Q8 — **결정됨: Hermes 미사용(2026-11-25).** 사용자 업무 관리는 Root가 사용자와 직접 한다. `policy/paseo-common.md` §2의 Hermes 역할 분담 문단을 «Hermes 미사용»으로 정리했고, MUST-PRESERVE #3·C4·C5를 갱신했다. Hermes work-manager 설정·플러그인 정리는 이 저장소 범위 밖이다.
+- Q9 — **결정됨(권장안 수용).** Paseo 특유 행위(**relay 켜기·유지·끄기**, 플러그인 설치, `archive_workspace`, schedule 생성(비용 발생), 권한 모드 상향(Claude `bypassPermissions`, Codex `full-access`))를 공통 Human Gate 항목으로 추가했다(common §6·§7, 설치 지시서 POLICY E). 현재 상태(F3, 2026-11-25 설정 파일 읽기, 값 출력 없음): `daemon.relay.enabled=true`, `daemon.*`에 비밀번호 계열 키 없음, `cors.allowedOrigins` 기본값. **relay는 사용자가 의도한 설정이므로 유지한다**(사용자 확인 2026-11-25). 조사 문서(`paseo-technical-research.md` 2절·Top risks)의 «relay는 끄고 비밀번호를 설정» 권고는 채택하지 않았다. 비밀번호 설정 필요성은 여전히 사용자 결정 사항이며 정책은 임의로 설정을 바꾸라고 쓰지 않는다.
+- Q10 — **결정됨(권장안 수용).** Owner 원장은 Task 로컬 기록 폴더(`LOCAL_ARTIFACT_ROOT/<TASK_ID>/`)에 둔다(Paseo 라벨만으로는 `list_agents`에 라벨 필터가 없어 부족). 개인 경로·에이전트 ID·워크스페이스 ID는 원장에만 두고 팀 공유 문서에 넣지 않는다.
 
 ## 6. 후속 단계별 영향 파일
 
@@ -182,9 +207,11 @@
 
 ### 3단계: 이 저장소와 전역 설정 (사용자 승인 후)
 
+> 2B(2026-11-25)에서 아래 «이 저장소» 항목 대부분을 반영했다(위 «2B 반영 이력»). 남은 것: 병행기 종료 후 `orca-*` «보관» 확정, 전역·연관 항목.
+
 - 이 저장소: `README.md`(Orca 전략 절), `orca-project-setup.md` → `paseo-project-setup.md` 신규, `project-task-policy-setup.md` POLICY F(Orca 결합 문구), `claude-code-global-model-routing-prompt.md`, `codex-global-model-routing-prompt.md`, `policy/model-routing.json`(제안 P1~P5), `policy/bundle.json`·`policy/adapters/*`, `ai_policy/bundle.py`(`REQUIRED`), `ai_policy/install.py`(설치 경로·마커가 orca 전용), `ai_policy/context.py`(ORCA_* 감지), `ai_policy/routing.py`(`--host paseo`), `tests/*`, `docs/reproducible-orca-environment.md`, 기존 `docs/orca-*.md`·`policy/orca-common.md`(병행기 종료 기준(Q1) 충족 후 «보관» 표시).
 - 전역: `~/.claude/CLAUDE.md`("Confirmed Orca tasks" 절, 기본 경로 표 구현 조율 행, Runtime notes), `~/.codex/AGENTS.md`(Orca 단락), `~/.claude/settings.json`·`~/.codex/hooks.json`의 Orca hook·statusLine·theme(C11).
-- 연관(정책 외, 영향만 기록): task-radar의 Orca 요청 outbox·relay-keeper, Hermes work-manager `policy.json`·orca-status 플러그인, `com.orcahq.gateway` launchd(C13), 볼트 `02_Projects/Orca/README.md`(C6), `~/.claude/skills`의 orca-* 스킬.
+- 연관(정책 외, 영향만 기록): task-radar의 Orca 요청 outbox·relay-keeper, (Hermes는 미사용 결정이므로 Hermes work-manager `policy.json`·orca-status 플러그인은 정리 후보로만 기록), `com.orcahq.gateway` launchd(C13), 볼트 `02_Projects/Orca/README.md`(C6), `~/.claude/skills`의 orca-* 스킬.
 
 ## 7. 확인됨과 미확인 목록
 
@@ -215,12 +242,12 @@
 6. 〔U-6〕 손자 에이전트 생성(중첩 오케스트레이션)의 실제 동작과 깊이 제한. Q4 점검 규칙이 대상으로 삼는다.
 7. 〔U-7〕 `labels` 키 규칙의 예약어 충돌 여부, `list_agents`의 라벨 조회 방법.
 8. 〔U-8〕 에이전트별 토큰·비용을 MCP로 얻는 방법(SDK `lastUsage`만 문서화).
-9. 〔U-9〕 **부분 확인**: 데몬 실행 방식·locale·`ANTHROPIC_BASE_URL`·relay·비밀번호 키·CORS·도구 주입 설정은 C-2~C-4로 확인됨. 남은 것: 비밀번호 설정 필요성, relay 의도(14번), 프록시·API 키 환경변수 중 `ANTHROPIC_BASE_URL` 외 항목의 존재 여부.
+9. 〔U-9〕 **부분 확인**: 데몬 실행 방식·locale·`ANTHROPIC_BASE_URL`·relay·비밀번호 키·CORS·도구 주입 설정은 C-2~C-4로 확인됨. 남은 것: 비밀번호 설정 필요성, 프록시·API 키 환경변수 중 `ANTHROPIC_BASE_URL` 외 항목의 존재 여부.
 10. 〔U-10〕 프로필 메모의 `gpt-6.2-sol`/`gpt-6.2-astra`와 json 고정 ID(`gpt-6.1-sol`/`gpt-6-astra`) 차이의 원인.
 11. 〔U-11〕 `#8436` 메시지 유실, `#7760` Codex 턴 후 정지가 v0.17.x에서 남아 있는지.
 12. 〔U-12〕 Claude Agent SDK 경유 구독 사용의 Anthropic 측 약관·과금 처리.
 13. 〔U-13〕 `paseo.json` setup 훅으로 정책 설치를 자동화할 수 있는지와 그 실패 시 동작. Q2 순서 조건 (1)의 확인 대상이다.
-14. 〔U-14〕 **사용자 확인 필요**: relay가 켜져 있는 의도와 비밀번호 필요 여부. 현재 상태는 켜짐·비밀번호 키 없음(C-4)이며 조사 문서 권고와 다르다. 임의 변경 금지, Q9로 사용자 결정.
+14. 〔U-14〕 **부분 해소(2026-11-25)**: relay가 켜져 있는 것은 사용자가 의도한 설정이며 유지한다. **남은 것: 비밀번호 필요 여부**(현재 비밀번호 키 없음, C-4, 조사 문서 권고와 다름). 임의 변경 금지, 변경은 Human Gate(Q9).
 15. 〔U-15〕 `plan_mode`가 도구·샌드박스 수준에서 쓰기·셸을 막는지: **미확인**. 2026-11-25 시험은 지침 수준 준수만 보였다(C-8). 이 시험으로 증명할 수 없으며, 증명 전까지 정책은 강제를 주장하지 않는다. 한계: 시험 2회, 모델 `gpt-6-luna` 한 종류, 에이전트의 거부가 지침 해석에 의존. 다른 모델·지침 변경 시 결과가 달라질 수 있다.
 16. 〔U-16〕 Worker 전용 custom provider 별칭으로 `create_agent`만 `disabledTools`에 넣을 수 있는지와 `claude` provider 설정을 공유하는 Root·Coordinator에 영향이 없는지(Q4 후속 방안).
 17. 〔U-17〕 Codex Worker commit을 막는 샌드박스 제약을 권한 모드 상향 없이 해소하는 지원 설정(예: 쓰기 가능 경로)이 있는지. 현재 규칙은 «commit하지 않는다»이며 우회 방안은 사용자 승인 사항이다(C-6).

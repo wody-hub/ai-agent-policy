@@ -1,3 +1,5 @@
+> **보관(병행기, 2026-11-25).** 조율 도구가 Orca에서 Paseo로 전환되었습니다. 이 문서는 병행기 동안 **기존 Orca가 소유한 진행 중 Run·worktree를 마무리**할 때만 사용하며, 새 Task는 [Paseo 설치 지시서](paseo-project-setup.md)를 따릅니다. 삭제하지 않으며, 모든 Orca Run의 정산·Dispatch release를 확인한 뒤 «보관»으로 확정합니다([이전 설계](docs/paseo-migration-design.md) Q1).
+
 # Orca 프로젝트 공통 전략 설치 지시서
 
 버전: `orca-project-policy@v1.2.1` · 기준일: 2026-10-07 · 모델 라우팅 개편: 2026-11-09

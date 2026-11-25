@@ -1,3 +1,5 @@
+> **Archived (parallel period, 2026-11-25).** The coordination tool moves from Orca to Paseo. Use this document only to finish Runs and worktrees that Orca already owns during the parallel period; new Tasks follow [Paseo policy](paseo-agent-lifecycle.md). It is not deleted; it becomes archived once every Orca Run is settled and its Dispatch is released (see [migration design](paseo-migration-design.md), Q1).
+
 # Orca managed Worker lifecycle
 
 This rulebook applies to Orca-supervised managed Workers. Project Task registration, Gitflow/worktree rules, Human Gates, and user authorization remain governed by their existing policies. It does not imply that direct terminal/agent sessions or Codex/Claude child agents are Orca-managed or automatically stopped.

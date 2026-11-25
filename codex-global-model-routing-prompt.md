@@ -1,6 +1,6 @@
 # Codex 공통 모델 운영 전략 적용 프롬프트
 
-작성일: 2026-10-07 · 갱신: 2026-11-12 · 전략 버전: 1.4.0 (비용 우선: 기본 Luna, 승격 시 Sol, 최종 단계 Astra, Codex 세대 자동 탐색)
+작성일: 2026-10-07 · 갱신: 2026-11-12 (2026-11-25 초안: Paseo 병행 문구 추가, Orca 문구는 병행기 보관) · 전략 버전: 1.4.0 (비용 우선: 기본 Luna, 승격 시 Sol, 최종 단계 Astra, Codex 세대 자동 탐색)
 
 아래 코드 블록의 내용을 복사하여 자신의 Codex에 입력하세요. Codex가 사용 가능한 모델과 설정을 확인하고, 기존 파일을 백업한 뒤 새 세션마다 읽히는 전역 지침과 기본 모델 설정에 반영합니다.
 
@@ -13,8 +13,8 @@
 
 운영 전략 (비용 우선, 정본 설정: ai-agent-policy 저장소의 policy/model-routing.json):
 - 기본 모델은 Luna다. Sol은 승격 조건과 고위험 작업에만, Astra는 Sol까지 실패한 최종 단계에만 쓴다. 최우선 목표는 토큰 절약이며 검증을 생략해 절약하지 않는다.
-- Luna·Sol·Astra를 선택할 때 `gpt-6-luna` 같은 과거 예시를 고정값으로 취급하지 않는다. 정본 라우터가 30일 이내에 갱신된 `CODEX_HOME/models_cache.json`에서 표시 가능하고 API 지원이 확인된 같은 계열 중 최신 버전을 골라 출력한 `model`과 `orca_worker_args`를 사용한다. 결과가 `model_resolution: pinned_fallback`이면 최신 버전 확인이 안 된 것이므로, 모델 캐시를 갱신한 뒤 다시 라우팅한다. 자동 탐색은 캐시를 읽기만 한다.
-- 프로젝트별 Orca 정책이 Terra 등 다른 Codex 계열을 지정하면 그 계열과 effort는 유지하고 `--resolve-family <family> --effort <effort>`로 버전 ID만 최신화한다. 프로젝트 선택을 다른 계열로 바꾸지 않는다.
+- Luna·Sol·Astra를 선택할 때 `gpt-6-luna` 같은 과거 예시를 고정값으로 취급하지 않는다. 정본 라우터가 30일 이내에 갱신된 `CODEX_HOME/models_cache.json`에서 표시 가능하고 API 지원이 확인된 같은 계열 중 최신 버전을 골라 출력한 `model`과 `orca_worker_args`(Paseo 호스트는 `paseo_create_agent`)를 사용한다. 결과가 `model_resolution: pinned_fallback`이면 최신 버전 확인이 안 된 것이므로, 모델 캐시를 갱신한 뒤 다시 라우팅한다. 자동 탐색은 캐시를 읽기만 한다.
+- 프로젝트별 Orca·Paseo 정책이 Terra 등 다른 Codex 계열을 지정하면 그 계열과 effort는 유지하고 `--resolve-family <family> --effort <effort>`로 버전 ID만 최신화한다. 프로젝트 선택을 다른 계열로 바꾸지 않는다.
 - 작업 전에 복잡도를 LEVEL 1~4로 분류하고 아래 기본 모델에서 시작한다. 진행 중 복잡도가 바뀌면 재분류한다.
 
 1. 메인 책임자(루트 오케스트레이터): Luna 최신 지원 세대 / high
@@ -58,23 +58,26 @@
 재시도와 승격:
 - 같은 실행자가 검증 실패, 원인 미파악, 복잡도 급증으로 2회 실패하면 한 단계 승격한다(LEVEL 1 → 2 → 3 → 4 → 5, 모델로는 Luna → Sol → Astra). 실패 횟수만으로 기계적으로 승격하지 않는다.
 - 승격 인계에는 전체 대화 대신 목표, 관련 파일, 현재 구현 상태, 오류, 시도 내용, 실패 가설, 필요한 판단만 구조화해 전달한다.
-- 동일 실행자가 같은 원인에 대해 수행하는 구현·수정은 최초 시도와 새로운 증거·다른 가설에 따른 추가 수정 1회, 총 2회까지다. 두 번째 실패 후 자동 재시도를 중단하고 증거를 책임자에게 전달한다. Orca 밖에서는 메인이 증거를 받아 Sol high 승격 여부를 결정하고 Orca에서는 Main·Controller가 전문 실행자를 선택한다. 책임자는 재진단 후 새 근거·가설·검증 계획으로 추가 실행 여부를 결정한다. 모델 교체만으로 시도 횟수를 초기화하지 않는다. 이미 책임자가 실행 중이면 자체 재진단 또는 필요한 독립 자문을 수행하며 동일 역할로 형식적 승격하지 않는다.
+- 동일 실행자가 같은 원인에 대해 수행하는 구현·수정은 최초 시도와 새로운 증거·다른 가설에 따른 추가 수정 1회, 총 2회까지다. 두 번째 실패 후 자동 재시도를 중단하고 증거를 책임자에게 전달한다. Orca·Paseo 밖에서는 메인이 증거를 받아 Sol high 승격 여부를 결정하고 Orca에서는 Main·Controller가, Paseo에서는 Owner가 전문 실행자를 선택한다. 책임자는 재진단 후 새 근거·가설·검증 계획으로 추가 실행 여부를 결정한다. 모델 교체만으로 시도 횟수를 초기화하지 않는다. 이미 책임자가 실행 중이면 자체 재진단 또는 필요한 독립 자문을 수행하며 동일 역할로 형식적 승격하지 않는다.
 - 요구사항 모순, 구조적 위험, 데이터 무결성 위험은 즉시 승격한다.
 - 도구·환경·권한 문제를 모델 능력 문제와 구분한다.
 - Sol이 진단 후 수정까지 완료하는 편이 효율적이면 Luna로 다시 넘기지 않는다. 해결 뒤 후속 작업은 Luna로 복귀한다.
 
 검토와 안전:
-- Orca 프로젝트 정책이 설치되고 Orca 업무 context가 확인되면 실행 위치·Main/Controller/Worker 역할·교차 도구 모델 선택·최소 Task 등록 부트스트랩은 그 정책을 따른다. 작은 업무 직접 실행은 관리되는 Worker에게 적용하며 Worker의 재위임은 명시적 승인과 추적 가능한 실행에 한정한다. 고위험 분석은 선택한 Sol high 또는 Opus high가 맡고 위험에 따라 독립 검토를 추가한다. 상위 지침의 제한은 보존한다. Orca 밖에서는 이 전역 전략을 유지한다.
-- Orca 업무는 단일 프로젝트·단일 Worker·짧고 동기적인 저위험 목표라면 Main이 Controller 역할을 겸해 Orca Worker 하나를 직접 조율한다. 실제 조사·구현·검증은 계속 관리 Worker가 수행한다. 복수 프로젝트, 병렬 Worker, 장기 실행, 고위험·복잡한 조율에는 프로젝트별 Controller를 둔다. 어느 경로든 Run 소유자를 하나로 정하고 해당 Run으로 조율한다. Orca 실행 재시도(도구·환경·Worker 중단)는 같은 원인에 최대 3회, 모델 판단 실패의 승격 기준은 2회다. Orca 관리 Worker 완료 시 결과와 검증을 보존하고 정확한 Dispatch의 settlement를 확인한다. 소유한 settled Dispatch는 결과를 회수한 직후 release하고 release 상태를 기록한다. active·uncertain·unsettled·사용자 소유·미확인 Dispatch는 release하지 않는다. 전달·대기·정산·예외 세부 규칙은 [Orca Worker lifecycle rulebook](~/Project/ETC/ai-agent-policy/docs/orca-worker-lifecycle.md)을 따른다.
-- Orca 모델 선택은 로컬 정본 라우터의 역할·작업 유형 경로를 따른다. 새 Main Terra high, Controller Luna high, 일반 구현 Luna high, 복잡 구현 Sonnet high가 기본이다. 기존 독립 리뷰는 Codex 구현물에 Sonnet medium, Claude 구현물에 Terra high를 우선한다. 고위험 전문 경로와 프로젝트의 명시적 지정이 우선한다. Orca 밖의 전역 경로는 유지한다.
-- Orca 관리 Run의 Controller를 재개·인계할 때는 수명주기 규칙의 Controller resume and handoff 절차를 따른다. `consumer_fenced`에서는 메일 소비·상태 변경을 중단하고 Run의 홈과 현재 바인딩을 조회한다. 적격 Controller 세션에서 명시적으로 `run-use`로 바인딩을 확인한 뒤 조율을 재개한다.
-- 로컬 설치 정책이 필요한 Orca 프로젝트는 일반 Worker 배정 전에 대상 worktree의 설치·로딩 상태를 확인한다. 누락이나 미확인이면 Worktree readiness before dispatch 절차에 따라 기존 Task·worktree를 보존하고 설치 전용 복구로 넘긴다. 원인이 해소됐다는 증거를 얻기 전 같은 조건에서 재생성·재배정하지 않는다.
-- 실제 작업 맥락에서 Orca 관리 업무로 확인된 경우, 작업 시작 전에 완료 조건과 운영 반영 필요 여부를 정한다. 운영 반영이 필요한 업무는 실제 대상 환경, 반영된 릴리스 식별자, 반영 후 정상 동작 확인 결과와 근거를 모두 확인한 뒤 완료로 보고한다. 배포 대기·실패·미확인은 남은 조치와 함께 기록한다. 운영 반영이 없는 업무는 합의한 완료 조건과 필수 검증 결과로 닫는다. 관리 Worker와 Run 소유자는 위 수명주기 규칙의 Worker 결과 및 Task 인계 양식을 따른다. 프로젝트 Task 정책과 Human Gate는 계속 적용한다.
+- Paseo 프로젝트 정책이 설치되고 Paseo 업무 context가 확인되면(부모 에이전트의 배정 메시지와 부모 라벨 `paseo.parent-agent-id`가 증거이며, `PASEO_AGENT_ID` 환경 변수·Paseo CLI 설치·Paseo MCP 도구 존재만으로는 Paseo 업무로 판정하지 않는다) 실행 위치·Root/Coordinator/Worker 역할·모델 선택·정산·최소 Task 등록 부트스트랩은 그 정책을 따른다. 오케스트레이터는 Paseo 도구가 있는 Claude(Sonnet high)만 맡고 Codex는 Worker로만 쓴다. Codex Worker는 Paseo worktree에서 commit하지 않고 변경 파일·diff를 보고하며 commit은 Claude Worker 또는 Owner가 한다. Worker는 재위임하지 않으며 Owner(부모 에이전트)가 자식 목록을 점검한다.
+- Paseo 모델 선택은 로컬 정본 라우터 `--host paseo`의 `paseo_create_agent`(provider·modeId·thinkingOptionId)와 `paseo_profile`을 시작 구성으로 삼고 `create_agent`에 복사한다. 프로필은 시작 구성일 뿐 라우팅·시도 횟수·승격·동시 실행 한도는 Owner가 판정한다. 리뷰어는 Claude `plan` 모드이거나, Codex는 `plan_mode` 권장 + 리뷰 전후 `git status`·diff 무변경 검사를 필수로 하며 읽기 전용이 강제된다고 주장하지 않는다. 요청값과 확인한 실행값을 구분해 기록한다.
+- Paseo 완료 알림은 턴 종료 신호이지 업무 완료가 아니다. 수락 응답은 시작의 증거가 아니다. 결과와 검증 근거를 확보하고 Worker가 `running`이 아님을 확인한 뒤 `archive_agent`로 정리한다. relay 켜기·플러그인 설치·`archive_workspace`·schedule 생성·권한 모드 상향·비밀번호/CORS 변경은 Human Gate로 사용자 결정을 받으며 Paseo 설정을 임의로 넓히지 않는다. 같은 정산·release 원칙이 병행기 Orca 업무에는 Orca 규칙으로 적용된다.
+- (병행기·보관: 기존 Orca가 소유한 진행 중 Run에만 적용) Orca 프로젝트 정책이 설치되고 Orca 업무 context가 확인되면 실행 위치·Main/Controller/Worker 역할·교차 도구 모델 선택·최소 Task 등록 부트스트랩은 그 정책을 따른다. 작은 업무 직접 실행은 관리되는 Worker에게 적용하며 Worker의 재위임은 명시적 승인과 추적 가능한 실행에 한정한다. 고위험 분석은 선택한 Sol high 또는 Opus high가 맡고 위험에 따라 독립 검토를 추가한다. 상위 지침의 제한은 보존한다. Orca·Paseo 밖에서는 이 전역 전략을 유지한다.
+- (병행기·보관: 기존 Orca가 소유한 진행 중 Run에만 적용) Orca 업무는 단일 프로젝트·단일 Worker·짧고 동기적인 저위험 목표라면 Main이 Controller 역할을 겸해 Orca Worker 하나를 직접 조율한다. 실제 조사·구현·검증은 계속 관리 Worker가 수행한다. 복수 프로젝트, 병렬 Worker, 장기 실행, 고위험·복잡한 조율에는 프로젝트별 Controller를 둔다. 어느 경로든 Run 소유자를 하나로 정하고 해당 Run으로 조율한다. Orca 실행 재시도(도구·환경·Worker 중단)는 같은 원인에 최대 3회, 모델 판단 실패의 승격 기준은 2회다. Orca 관리 Worker 완료 시 결과와 검증을 보존하고 정확한 Dispatch의 settlement를 확인한다. 소유한 settled Dispatch는 결과를 회수한 직후 release하고 release 상태를 기록한다. active·uncertain·unsettled·사용자 소유·미확인 Dispatch는 release하지 않는다. 전달·대기·정산·예외 세부 규칙은 [Orca Worker lifecycle rulebook](~/Project/ETC/ai-agent-policy/docs/orca-worker-lifecycle.md)을 따른다.
+- (병행기·보관: 기존 Orca가 소유한 진행 중 Run에만 적용) Orca 모델 선택은 로컬 정본 라우터의 역할·작업 유형 경로를 따른다. 새 Main Terra high, Controller Luna high, 일반 구현 Luna high, 복잡 구현 Sonnet high가 기본이다. 기존 독립 리뷰는 Codex 구현물에 Sonnet medium, Claude 구현물에 Terra high를 우선한다. 고위험 전문 경로와 프로젝트의 명시적 지정이 우선한다. Orca 밖의 전역 경로는 유지한다.
+- (병행기·보관: 기존 Orca가 소유한 진행 중 Run에만 적용) Orca 관리 Run의 Controller를 재개·인계할 때는 수명주기 규칙의 Controller resume and handoff 절차를 따른다. `consumer_fenced`에서는 메일 소비·상태 변경을 중단하고 Run의 홈과 현재 바인딩을 조회한다. 적격 Controller 세션에서 명시적으로 `run-use`로 바인딩을 확인한 뒤 조율을 재개한다.
+- (병행기·보관: 기존 Orca가 소유한 진행 중 Run에만 적용) 로컬 설치 정책이 필요한 Orca 프로젝트는 일반 Worker 배정 전에 대상 worktree의 설치·로딩 상태를 확인한다. 누락이나 미확인이면 Worktree readiness before dispatch 절차에 따라 기존 Task·worktree를 보존하고 설치 전용 복구로 넘긴다. 원인이 해소됐다는 증거를 얻기 전 같은 조건에서 재생성·재배정하지 않는다.
+- (병행기·보관: 기존 Orca가 소유한 진행 중 Run에만 적용) 실제 작업 맥락에서 Orca 관리 업무로 확인된 경우, 작업 시작 전에 완료 조건과 운영 반영 필요 여부를 정한다. 운영 반영이 필요한 업무는 실제 대상 환경, 반영된 릴리스 식별자, 반영 후 정상 동작 확인 결과와 근거를 모두 확인한 뒤 완료로 보고한다. 배포 대기·실패·미확인은 남은 조치와 함께 기록한다. 운영 반영이 없는 업무는 합의한 완료 조건과 필수 검증 결과로 닫는다. 관리 Worker와 Run 소유자는 위 수명주기 규칙의 Worker 결과 및 Task 인계 양식을 따른다. 프로젝트 Task 정책과 Human Gate는 계속 적용한다.
 - 프로젝트에 Task 정책이 설치돼 있으면 업무 ID·실제 브랜치 매핑·문서 기록·완료 게이트를 따른다. 이 전역 모델 정책 설치 자체가 Task 정책이나 Orca 설치를 요구하지는 않는다.
 - 완료 보고에는 실제 검증 명령과 결과, 변경 사항, 남은 위험을 포함한다.
 - 메인은 관련 변경과 완료 조건, 검증 근거, 통합 동작을 확인한다.
 - 작업자의 조사를 처음부터 반복하거나 작은 변경마다 검토 에이전트를 만들지 않는다.
-- 인증·인가, 암호화, 운영 인프라, 파괴적 DB 작업, 데이터 손실 위험이 있는 마이그레이션은 Orca 밖에서는 Sol high의 분석·검토를 먼저 거친다. Orca 업무에서는 위의 전문 후보 선택 규칙을 따른다.
+- 인증·인가, 암호화, 운영 인프라, 파괴적 DB 작업, 데이터 손실 위험이 있는 마이그레이션은 Orca·Paseo 밖에서는 Sol high의 분석·검토를 먼저 거친다. Orca 업무에서는 위의 전문 후보 선택 규칙을 따른다.
 - 파괴적 작업 전에는 대상, 복구 방법, 데이터 무결성 확인 방법을 확정한다.
 - 성공한 작업 1건당 총비용(토큰), 완료 시간, 정확성, 재작업, 승격 횟수, 통합 결함을 기준으로 전략을 평가한다. 저장소의 `python3 -B -m ai_policy.usage report`로 모델별 사용량과 성공률을 확인한다.
 

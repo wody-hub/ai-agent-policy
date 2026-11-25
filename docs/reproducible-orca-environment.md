@@ -1,3 +1,5 @@
+> **Archived (parallel period, 2026-11-25).** The coordination tool moves from Orca to Paseo. Use this document only to finish Runs and worktrees that Orca already owns during the parallel period; new Tasks follow [Paseo policy](../policy/paseo-common.md). It is not deleted; it becomes archived once every Orca Run is settled and its Dispatch is released (see [migration design](paseo-migration-design.md), Q1).
+
 # Reproducible Orca policy bundle
 
 This repository provides a Python standard-library CLI for a shared Orca policy

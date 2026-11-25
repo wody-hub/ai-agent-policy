@@ -1,4 +1,6 @@
-# Shared Orca managed-context policy · 0.2.1
+# Shared Orca managed-context policy · 0.2.2
+
+> Archived (parallel period, 2026-11-25): apply this body only to Runs that Orca already owns; new Tasks use the shared Paseo policy (`policy/paseo-common.md`).
 
 Apply this common body only after a verified installed bundle and supported invocation-bound evidence identify the current live Orca terminal and matching registered canonical workspace, host and runtime. Metadata, environment hints, a CLI flag, a matching handle, caller-session ID or connected status alone do not prove origin. If evidence is absent or ambiguous, emit no automatic policy. Explicit user-requested guidance is separate and grants no execution authority.
 

@@ -1,3 +1,5 @@
+> **보관(병행기, 2026-11-25).** 조율 도구가 Orca에서 Paseo로 전환되었습니다. 이 문서는 병행기 동안 **기존 Orca가 소유한 진행 중 Run·worktree를 마무리**할 때만 사용하며, 새 Task는 [Paseo 설치 지시서](../paseo-project-setup.md)를 따릅니다. 삭제하지 않으며, 모든 Orca Run의 정산·Dispatch release를 확인한 뒤 «보관»으로 확정합니다([이전 설계](paseo-migration-design.md) Q1).
+
 # Orca 작업 유형별 모델 라우팅
 
 공통 Orca 기본값은 `policy/model-routing.json`에 둔다. 필수 고위험 전문 경로, 프로젝트·사용자 지정, 단순 조건, 유형, 복잡도 순으로 판정한다. 선택 결과는 새 세션의 배정 후보이며 진행 중인 세션의 모델을 바꾸지 않는다. 기존 역할, 리뷰와 완료 게이트를 적용한다.

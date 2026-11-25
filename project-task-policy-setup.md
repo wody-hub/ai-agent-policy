@@ -2,20 +2,22 @@
 
 버전: `project-task-policy@v1.0.8` · 개정일: 2026-11-23
 
+> 2026-11-25 초안 변경(버전 번호는 사용자 결정 전까지 올리지 않음): 조율 도구가 Orca에서 Paseo로 전환되므로 **POLICY F의 결합 문구를 Paseo 기준으로 바꾸고 Orca 결합은 병행기 보관 문구로 남겼다.** 이 문서의 다른 곳에 있는 Orca 용어(Task/Run/Dispatch ID, Controller, 기준 자식 워크트리, Orca ref 검증 등)는 병행기 동안 기존 Orca 업무에 그대로 유효하며, Paseo 용어로 옮기는 작업은 [Paseo 설치 지시서](paseo-project-setup.md)의 대응 규칙(Controller→Coordinator/Owner, Orca Task/Run/Dispatch ID→Paseo agentId·workspaceId, 기준 자식 워크트리→`create_workspace` branch-off)을 따라 후속으로 한다.
+
 AI가 실제 업무를 수행할 때 요구사항, 설계, 실행, 리뷰, 검증과 커밋을 하나의 Task ID로 추적하도록 프로젝트에 설치하는 지시서입니다. 프로젝트 그룹에서는 확인한 문서 저장소를, 단일 프로젝트에서는 내부 `docs/tasks/`를 사용합니다.
 
 ## 사용 방법
 
 대상 프로젝트에서 Codex 또는 Claude Code에 이 파일을 읽게 한 뒤 요청하세요.
 
-> 이 지시서를 끝까지 읽고 프로젝트 Task 관리 정책을 설치해줘. 기존 지침과 프로젝트 보정은 보존하고, 문서 정본 위치와 브랜치 연결을 확인해줘. Orca 정책이 있으면 연동하고, 없으면 Task 정책만 설치해줘.
+> 이 지시서를 끝까지 읽고 프로젝트 Task 관리 정책을 설치해줘. 기존 지침과 프로젝트 보정은 보존하고, 문서 정본 위치와 브랜치 연결을 확인해줘. Paseo 정책이 있으면 연동하고, 없으면 Task 정책만 설치해줘. (병행기 동안 기존 Orca 정책이 있는 프로젝트는 Orca 연동으로 설치해줘.)
 
 이 파일 하나로 설치를 요청할 수 있습니다. 다른 세 설치 파일과 전역 모델 설정은 필수 입력이 아닙니다. 아래 지시가 실제로 실행되어 프로젝트 진입 파일에 연결되어야 새 세션에 적용됩니다. 실제 업무 시작·완료 조건은 필수 규칙으로 설치하되, 지원되지 않는 실행 차단 기능을 구현했다고 주장하지 않습니다.
 
 ## 설치 프롬프트
 
 ```text
-너는 기존 프로젝트의 AI 업무 기록 정책 설치 담당자다. 다음 정책을 프로젝트별로 설치하고 검증해줘. 다른 모델·Orca 정책이 없어도 단독으로 동작해야 하고, 함께 설치하면 각 정책의 담당 영역을 유지하면서 연결되어야 한다.
+너는 기존 프로젝트의 AI 업무 기록 정책 설치 담당자다. 다음 정책을 프로젝트별로 설치하고 검증해줘. 다른 모델·Paseo(병행기 Orca) 정책이 없어도 단독으로 동작해야 하고, 함께 설치하면 각 정책의 담당 영역을 유지하면서 연결되어야 한다.
 
 VERSION
 project-task-policy@v1.0.7 (2026-10-07)
@@ -103,11 +105,13 @@ POLICY E — 커밋과 완료 회계
 
 POLICY F — 네 정책의 독립성과 조합
 - Codex 전역 정책은 Codex 역할·모델 배정, Claude 전역 정책은 Claude 역할·모델 배정을 담당한다. 이 설치는 두 정책이나 CLI 설치를 필수로 요구하지 않는다.
-- Orca 정책이 없으면 현재 저장소의 확인한 개발·브랜치 규칙으로 Task 기록과 브랜치 연결만 수행한다. dev 강제, Orca 호출, 교차 도구 실행, Worker 생성은 추가하지 않는다.
-- Orca 정책이 있으면 실행 위치·업무 유형별 Gitflow base·직접 기준 부모·모델 후보 선택은 그 정책이 담당하고, Task 정책은 업무 정본·ID·연결표·기록·문서 커밋을 담당한다.
-- 결합 실행: 기존/새 TASK_ID 결정 → 문서 위치·Task 등록 준비 → Orca의 저장소별 업무 유형에 맞는 기준 자식 워크트리 생성·검사 → 문서 Task 등록·저장소 매핑 → Worker 배정·구현·검증 → Task 갱신·문서 커밋 → 상태와 커밋 보고.
+- Paseo 정책(병행기 동안은 Orca 정책도 동일)이 없으면 현재 저장소의 확인한 개발·브랜치 규칙으로 Task 기록과 브랜치 연결만 수행한다. dev 강제, Paseo·Orca 호출, 교차 도구 실행, Worker 생성은 추가하지 않는다.
+- Paseo 정책이 있으면 실행 위치·업무 유형별 Gitflow base·모델 후보 선택은 그 정책이 담당하고, Task 정책은 업무 정본·ID·연결표·기록·문서 커밋을 담당한다. Paseo에는 Orca의 parent workspace가 없으므로 «직접 기준 부모» 확인은 Git 기준 ref·SHA, Paseo 프로젝트 소속, 에이전트 부모 라벨(`paseo.parent-agent-id`)을 각각 확인하는 것으로 바뀐다.
+- Paseo 결합 실행: 기존/새 TASK_ID 결정 → 문서 위치·Task 등록 준비 → Paseo의 저장소별 업무 유형에 맞는 기준 워크스페이스(`create_workspace` branch-off, 명시한 baseBranch, 초기 HEAD 확인) 생성·검사 → 문서 Task 등록·저장소 매핑(연결표에 Paseo agentId·workspaceId를 로컬 실행 기록으로 연결) → Worker 배정·구현·검증 → Task 갱신·문서 커밋 → 상태와 커밋 보고. 업무 TASK_ID와 Paseo agentId·workspaceId는 별개 식별자다.
+- Paseo에서 Codex Worker는 Paseo worktree에서 commit하지 못하므로 문서 담당 Worker는 가능하면 Claude로 배정한다. Codex가 문서를 작성했다면 Owner(부모 에이전트) 또는 Claude Worker가 보고된 diff 그대로 `git add <명시 파일>`로 커밋하며 내용은 바꾸지 않는다. Owner가 후속 공유 문서를 대신 편집하지는 않는다.
+- (병행기 보관) Orca 정책이 있으면 실행 위치·업무 유형별 Gitflow base·직접 기준 부모·모델 후보 선택은 그 정책이 담당한다. 결합 실행: 기존/새 TASK_ID 결정 → 문서 위치·Task 등록 준비 → Orca의 저장소별 업무 유형에 맞는 기준 자식 워크트리 생성·검사 → 문서 Task 등록·저장소 매핑 → Worker 배정·구현·검증 → Task 갱신·문서 커밋 → 상태와 커밋 보고. 병행기 종료 기준(모든 Orca Run 정산·Dispatch release 확인)을 충족한 뒤 이 항목을 «보관»으로 표시한다.
 - 정책 연결을 시작할 때 설치 상태·버전을 확인한다. 다른 정책이 없다는 이유로 Task 기록을 생략하거나 자동으로 다른 정책을 설치하지 않는다.
-- 모든 Task가 별도 모델을 요구하지 않는다. Orca 밖에서는 작은 업무도 Task 기록을 지키며 현재 Agent가 처리할 수 있다. Orca에서는 관리되는 Worker가 담당 업무를 직접 처리하고 Main·Controller는 배정·조율과 최소 등록 부트스트랩만 수행한다. Worker의 재위임은 Main·Controller의 명시적 승인과 추적 가능한 실행이 필요하다. 순수 질문에는 Task 생성을 강제하지 않는다.
+- 모든 Task가 별도 모델을 요구하지 않는다. Paseo(병행기 Orca) 밖에서는 작은 업무도 Task 기록을 지키며 현재 Agent가 처리할 수 있다. Paseo에서는 Worker가 담당 업무를 직접 처리하고 Root·Coordinator는 배정·조율과 최소 등록 부트스트랩만 수행한다(Orca에서는 Main·Controller). Worker의 재위임은 Owner의 명시적 승인과 추적 가능한 실행이 필요하다. 순수 질문에는 Task 생성을 강제하지 않는다.
 - 설치 순서에 의존하지 않도록 각각의 관리 블록과 버전을 분리한다. 나중에 다른 정책을 설치해도 기존 블록을 지우거나 두 정책의 본문을 중복 복사하지 않는다.
 
 PHASE 1 — 설치 산출물과 필수 템플릿
