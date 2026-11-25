@@ -1,6 +1,6 @@
 # Paseo 모델 라우팅 (draft 0.1.1)
 
-상태: 초안(2026-11-25, 같은 날 사용자 확정 결정 반영, Q3 Codex 리뷰어 읽기 전용은 2026-11-25 시험 결과로 확정: plan_mode 권장, 강제 주장 금지, 무변경 검사 필수). 정본 값은 [`policy/model-routing.json`](../policy/model-routing.json)(1.5.0)이며 이 문서는 그 값을 Paseo 프로필에 대응시키는 규칙이다. `model-routing.json`은 2B(2026-11-25)에서 1.6.0으로 올려 제안 P1~P4를 반영했다(5절에 반영·미반영 구분). 라우터는 `--host paseo`를 지원한다. Orca용 세부 유형표는 [Orca 작업 유형별 모델 라우팅](orca-model-routing.md)을 그대로 쓴다.
+상태: 초안(2026-11-25, 같은 날 사용자 확정 결정 반영, Q3 Codex 리뷰어 읽기 전용은 2026-11-25 시험 결과로 확정: plan_mode 권장, 강제 주장 금지, 무변경 검사 필수). 정본 값은 [`policy/model-routing.json`](../policy/model-routing.json)(1.6.0)이며 이 문서는 그 값을 Paseo 프로필에 대응시키는 규칙이다. `model-routing.json`은 2B(2026-11-25)에서 1.6.0으로 올려 제안 P1~P4를 반영했다(5절에 반영·미반영 구분). 라우터는 `--host paseo`를 지원한다. Orca용 세부 유형표는 [Orca 작업 유형별 모델 라우팅](orca-model-routing.md)을 그대로 쓴다.
 
 ## 1. 원칙
 

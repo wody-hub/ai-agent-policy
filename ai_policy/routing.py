@@ -275,12 +275,18 @@ def route(config, *, host, level=None, task_type=None, role=None, failures=0, fa
         if chosen is not None and action!='handoff_to_lead':
             a, e, model_id, _=chosen; tool=config['models'][a]['tool']
             review=_paseo_review(config, task_type, tool)
-            out['paseo_create_agent']=_paseo_start_config(config, tool, model_id, e, review)
             out['paseo_review']=review
-            if review and review['write_block_required'] and tool=='codex': reasons.append('review_write_block_requires_claude_plan')
-            profile=_paseo_profile(config, role, cur, task_type, a, e)
-            out['paseo_profile']=profile
-            reasons.append('paseo_profile:'+(profile or 'none_configure_directly'))
+            if review and review['write_block_required'] and tool=='codex':
+                # A write-blocking review needs a Claude plan-mode reviewer; Codex plan_mode is not enforced. Block instead of returning a runnable config.
+                out['action']=action='blocked_no_available_model'
+                reasons.append('review_write_block_requires_claude_plan')
+                for k in ('alias','tool','agent','model','model_resolution','effort','tier'): out[k]=None
+                out['premium']=False
+            else:
+                out['paseo_create_agent']=_paseo_start_config(config, tool, model_id, e, review)
+                profile=_paseo_profile(config, role, cur, task_type, a, e)
+                out['paseo_profile']=profile
+                reasons.append('paseo_profile:'+(profile or 'none_configure_directly'))
     if action=='handoff_to_lead': out['orca_worker_args']=[]  # stop: nothing further to launch automatically
     out['preserve_state']=action in PRESERVE
     if action in ('escalate','handoff_to_lead'): out['handoff_fields']=list(esc['handoff_fields'])

@@ -89,6 +89,32 @@ class PaseoRoutingTests(unittest.TestCase):
         self.assertEqual(y['paseo_review']['tool'], 'codex')
         self.assertIn('review_write_block_requires_claude_plan', y['reasons'])
 
+    def test_write_block_review_without_claude_is_blocked(self):
+        y=r(task_type='security_review', available=['luna'])
+        self.assertEqual(y['action'], 'blocked_no_available_model')
+        self.assertIsNone(y['paseo_create_agent']); self.assertIsNone(y['paseo_profile'])
+        self.assertIsNone(y['alias']); self.assertIsNone(y['model'])
+        self.assertTrue(y['paseo_review']['write_block_required'])
+        self.assertIn('review_write_block_requires_claude_plan', y['reasons'])
+        b=io.StringIO()
+        with contextlib.redirect_stdout(b):
+            code=routing.main(['--host','paseo','--task-type','security_review','--available','luna','--model-catalog','/nonexistent'])
+        self.assertEqual(code, 40); self.assertIsNone(json.loads(b.getvalue())['paseo_create_agent'])
+
+    def test_write_block_review_with_claude_keeps_plan(self):
+        x=r(task_type='security_review', available=['sonnet','opus','luna'])
+        self.assertEqual(x['action'], 'run')
+        self.assertEqual(x['paseo_create_agent']['settings']['modeId'], 'plan')
+        self.assertNotIn('review_write_block_requires_claude_plan', x['reasons'])
+
+    def test_non_write_block_review_codex_fallback_still_runs(self):
+        x=r(task_type='code_review_claude', available=['luna'])
+        self.assertEqual(x['action'], 'run')
+        self.assertEqual(x['paseo_review']['tool'], 'codex'); self.assertFalse(x['paseo_review']['write_block_required'])
+        self.assertIs(x['paseo_review']['enforced'], False)
+        self.assertEqual(x['paseo_create_agent']['settings']['features'], {'plan_mode': True})
+        self.assertNotIn('review_write_block_requires_claude_plan', x['reasons'])
+
     def test_handoff_and_non_model_failure_actions(self):
         x=r(level=4, failures=2, failure_kind='reasoning', resolved=False)
         self.assertEqual(x['action'], 'escalate')
