@@ -41,7 +41,15 @@ def load_config(path=None):
                 _pick(c, entry[h])
     for group in ('levels','roles'):
         for e in c[group].values():
-            for e2 in e.get('orca_alternatives', ()): _pick(c, e2)
+            for key in ('orca_alternatives','paseo_alternatives'):
+                alts=e.get(key, ())
+                if not isinstance(alts, (list, tuple)): _bad()
+                for e2 in alts: _pick(c, e2)
+    for name, h in hosts.items():
+        if not isinstance(h, dict) or not isinstance(h.get('tools'), list): _bad()
+        ot=h.get('orchestrator_tools')
+        if ot is not None and (not isinstance(ot, list) or not set(ot)<=set(h['tools'])): _bad()
+    _validate_paseo(c)
     task_routes = c.get('orca_task_routes', {})
     if not isinstance(task_routes, dict): _bad()
     for key, entries in task_routes.items():
@@ -55,6 +63,26 @@ def load_config(path=None):
         if a not in c['models'] or any(x not in c['models'] for x in fb): _bad()
     if any(k not in c['escalation'] for k in ('reasoning_failures_before_escalation','counted_failure_kinds','immediate_failure_kinds','non_model_failure_kinds','handoff_fields')): _bad()
     return c
+
+def _validate_paseo(c):
+    """Optional Paseo blocks: profile name map and review mode."""
+    profiles=c.get('paseo_profiles', {})
+    if not isinstance(profiles, dict): _bad()
+    for name, spec in profiles.items():
+        if not isinstance(spec, dict): _bad()
+        if 'role' in spec and spec['role'] not in c['roles']: _bad()
+        if 'level' in spec and str(spec['level']) not in c['levels']: _bad()
+        for t in spec.get('task_types', ()):
+            if t not in c['task_types']: _bad()
+        if 'task_types' in spec: _pick(c, spec.get('expect'))
+        if not any(k in spec for k in ('role','level','task_types')): _bad()
+    review=c.get('review_mode')
+    if review is not None:
+        if not isinstance(review, dict): _bad()
+        for key in ('task_types','write_block_required_task_types'):
+            if not isinstance(review.get(key, []), list) or any(t not in c['task_types'] for t in review.get(key, [])): _bad()
+        for tool in ('claude','codex'):
+            if tool in review and (not isinstance(review[tool], dict) or not isinstance(review[tool].get('modeId'), str)): _bad()
 
 def _catalog_id(model, catalog):
     family=model.get('codex_family')
@@ -104,9 +132,45 @@ def resolve_codex_family(config, family, *, model_catalog=None, effort=None):
             'reasons':['model_resolution:'+resolution],
             'orca_worker_args':['--agent','codex','--model',model_id]+(['--effort',effort] if effort else [])}
 
-def _usable(config, host, alias, available, model_id):
+def _usable(config, host, alias, available, model_id, orchestrator=False):
     m=config['models'][alias]
-    return bool(m['enabled']) and m['tool'] in config['hosts'][host]['tools'] and (available is None or alias in available or model_id in available)
+    tools=config['hosts'][host]['tools']
+    if orchestrator and 'orchestrator_tools' in config['hosts'][host]: tools=config['hosts'][host]['orchestrator_tools']
+    return bool(m['enabled']) and m['tool'] in tools and (available is None or alias in available or model_id in available)
+
+def _host_keys(config, host):
+    """Per-host keys for alternative lists and task routes; Orca keeps its original keys implicitly."""
+    h=config['hosts'][host]
+    return (h.get('alternatives_key', 'orca_alternatives' if host=='orca' else None),
+            h.get('task_routes_key', 'orca_task_routes' if host=='orca' else None))
+
+def _paseo_start_config(config, tool, model_id, effort, review=None):
+    """create_agent starting configuration. Profiles have no API parameter, so the Owner copies these fields."""
+    settings={'modeId': config['hosts']['paseo'].get('default_mode_id', 'auto')}
+    if effort: settings['thinkingOptionId']=effort
+    if review is not None:
+        settings['modeId']=review['modeId']
+        if review.get('features'): settings['features']=dict(review['features'])
+    return {'provider': tool+'/'+model_id, 'settings': settings}
+
+def _paseo_review(config, task_type, tool):
+    rm=config.get('review_mode')
+    if not rm or task_type not in rm.get('task_types', ()) or tool not in rm: return None
+    out=dict(rm[tool]); out['tool']=tool
+    out['write_block_required']=task_type in rm.get('write_block_required_task_types', ())
+    return out
+
+def _paseo_profile(config, role, level, task_type, alias, effort):
+    """Profile whose assumed (alias, effort) equals the routed one; otherwise None (configure directly)."""
+    for name, spec in config.get('paseo_profiles', {}).items():
+        if 'task_types' in spec:
+            hit=task_type in spec['task_types'] and (alias, effort)==tuple(spec['expect'])
+        elif 'role' in spec:
+            hit=level is None and role==spec['role'] and (alias, effort)==tuple(config['roles'][role]['paseo'])
+        else:
+            hit=level is not None and level==spec['level'] and (alias, effort)==tuple(config['levels'][str(level)]['paseo'])
+        if hit: return name
+    return None
 
 def _effort(m, want):
     ef=m['efforts']
@@ -162,11 +226,13 @@ def route(config, *, host, level=None, task_type=None, role=None, failures=0, fa
         else: action='retry'; reasons.append('below_failure_threshold')
     lv=config['levels'][str(cur)] if cur else None
     task_choices = ()
-    if host == 'orca' and cur is not None and cur == base and not high_risk and cur < 4 and (level is None or level == config['task_types'].get(task_type)):
-        task_choices = config.get('orca_task_routes', {}).get(task_type, ())
+    alt_key, routes_key = _host_keys(config, host)
+    if routes_key and cur is not None and cur == base and not high_risk and cur < 4 and (level is None or level == config['task_types'].get(task_type)):
+        task_choices = config.get(routes_key, {}).get(task_type, ())
     selected = lv if lv else config['roles'][role]
+    orchestrator = lv is None and selected.get('orchestrator') is True
     entry = task_choices[0] if task_choices else selected[host]
-    alternatives = task_choices[1:] if task_choices else selected.get('orca_alternatives') if host == 'orca' else None
+    alternatives = task_choices[1:] if task_choices else selected.get(alt_key) if alt_key else None
     palias, peffort=entry
     cands, chosen, fallback_used=[], None, False
     if cur==top and top>4: reasons.append('last_resort')
@@ -181,7 +247,7 @@ def route(config, *, host, level=None, task_type=None, role=None, failures=0, fa
             if a in seen or (config['models'][a]['tier']=='exceptional' and cur!=top): continue
             seen.add(a)
             model_id, model_resolution=_resolved_model(config['models'][a], model_catalog)
-            if _usable(config, host, a, available, model_id):
+            if _usable(config, host, a, available, model_id, orchestrator):
                 if a==palias or alternatives is not None:
                     chosen=(a, e, model_id, model_resolution)
                 else:
@@ -202,6 +268,19 @@ def route(config, *, host, level=None, task_type=None, role=None, failures=0, fa
         out.update(alias=a, tool=m['tool'], agent=m['agent'], model=model_id, model_resolution=model_resolution, effort=e, tier=m['tier'],
                    premium=m['tier'] in config['limits'].get('premium_tiers', ()),
                    orca_worker_args=['--agent', m['agent'], '--model', model_id]+(['--effort', e] if e else []))
+    if host=='paseo':
+        # Paseo has no worker-start arguments; the start configuration is create_agent fields.
+        out['orca_worker_args']=[]
+        out.update(paseo_create_agent=None, paseo_profile=None, paseo_review=None)
+        if chosen is not None and action!='handoff_to_lead':
+            a, e, model_id, _=chosen; tool=config['models'][a]['tool']
+            review=_paseo_review(config, task_type, tool)
+            out['paseo_create_agent']=_paseo_start_config(config, tool, model_id, e, review)
+            out['paseo_review']=review
+            if review and review['write_block_required'] and tool=='codex': reasons.append('review_write_block_requires_claude_plan')
+            profile=_paseo_profile(config, role, cur, task_type, a, e)
+            out['paseo_profile']=profile
+            reasons.append('paseo_profile:'+(profile or 'none_configure_directly'))
     if action=='handoff_to_lead': out['orca_worker_args']=[]  # stop: nothing further to launch automatically
     out['preserve_state']=action in PRESERVE
     if action in ('escalate','handoff_to_lead'): out['handoff_fields']=list(esc['handoff_fields'])
@@ -227,6 +306,9 @@ def main(argv=None):
             if a.host not in config['hosts']: raise PolicyError('unknown_host')
             if 'codex' not in config['hosts'][a.host]['tools']: raise PolicyError('unsupported_host')
             result=resolve_codex_family(config,a.resolve_family,model_catalog=model_catalog,effort=a.effort)
+            if a.host=='paseo':
+                result['orca_worker_args']=[]
+                result['paseo_create_agent']=_paseo_start_config(config,'codex',result['model'],a.effort)
             print(json.dumps(result, sort_keys=True)); return 0
         if a.effort is not None: raise PolicyError('invalid_selector')
         r=route(config, host=a.host, level=a.level, task_type=a.task_type, role=a.role, failures=a.failures,

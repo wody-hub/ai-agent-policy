@@ -1,7 +1,11 @@
 {
   "schema": 1,
-  "version": "1.5.0",
+  "version": "1.6.0",
   "verified_on": "2026-11-12",
+  "changelog": [
+    {"version": "1.6.0", "date": "2026-11-25", "change": "Add host paseo (P1), Paseo-host Sonnet high orchestrator/coordinator roles with no fallback and an orchestrator_tools restriction (P2), paseo_profiles name map (P3) and review_mode (P4). Orca, claude and codex host values, orca_task_routes and limits are unchanged. P5 (Codex fallback IDs) and P6 (profile plan_mode in the user Paseo config) are not applied; verified_on is not refreshed because model access was not re-verified."},
+    {"version": "1.5.0", "date": "2026-11-12", "change": "Baseline before Paseo support."}
+  ],
   "notes": "Codex Luna/Terra/Sol/Astra resolve to the highest visible, API-supported generation in the installed models_cache.json matching codex_family when fetched within 30 days; the family resolver also supports Terra for project-specific routes. id is the last-known fallback when the cache is missing, stale, or has no match. The resolver reads but never refreshes that cache. Claude and Fable IDs remain version-pinned. Prices are intentionally null until an approved source is recorded; null means the cost estimate is reported as not collected.",
   "models": {
     "luna":   {"tool": "codex",  "agent": "codex",  "id": "gpt-6-luna",                "codex_family": "luna", "tier": "economy", "efforts": ["low", "medium", "high", "xhigh", "max"], "enabled": true},
@@ -22,21 +26,23 @@
   "hosts": {
     "orca":   {"tools": ["claude", "codex"], "description": "Confirmed Orca task: Controller may assign either tool per worker."},
     "claude": {"tools": ["claude"], "description": "Claude Code session outside Orca."},
-    "codex":  {"tools": ["codex"], "description": "Codex session outside Orca."}
+    "codex":  {"tools": ["codex"], "description": "Codex session outside Orca."},
+    "paseo":  {"tools": ["claude", "codex"], "orchestrator_tools": ["claude"], "alternatives_key": "paseo_alternatives", "task_routes_key": "orca_task_routes",
+               "description": "Confirmed Paseo task: orchestrators need Paseo tools (Claude only); workers may be Claude or Codex. Output is a create_agent starting configuration; the Owner computes attempts, escalation and concurrency."}
   },
   "roles": {
-    "root_orchestrator":   {"level": 2, "orca": ["terra", "high"], "orca_alternatives": [["sonnet", "high"]], "claude": ["sonnet", "medium"], "codex": ["luna", "high"]},
-    "project_coordinator": {"level": 2, "orca": ["luna", "high"], "orca_alternatives": [["terra", "high"]], "claude": ["sonnet", "medium"], "codex": ["luna", "high"]},
-    "lookup":              {"level": 1, "orca": ["luna", "medium"],   "claude": ["haiku", null],      "codex": ["luna", "medium"]}
+    "root_orchestrator":   {"level": 2, "orchestrator": true, "orca": ["terra", "high"], "orca_alternatives": [["sonnet", "high"]], "paseo": ["sonnet", "high"], "paseo_alternatives": [], "claude": ["sonnet", "medium"], "codex": ["luna", "high"]},
+    "project_coordinator": {"level": 2, "orchestrator": true, "orca": ["luna", "high"], "orca_alternatives": [["terra", "high"]], "paseo": ["sonnet", "high"], "paseo_alternatives": [], "claude": ["sonnet", "medium"], "codex": ["luna", "high"]},
+    "lookup":              {"level": 1, "orca": ["luna", "medium"],   "paseo": ["luna", "medium"], "claude": ["haiku", null],      "codex": ["luna", "medium"]}
   },
   "levels": {
-    "1": {"name": "simple",   "orca": ["luna", "medium"],  "claude": ["sonnet", "low"],    "codex": ["luna", "medium"]},
-    "2": {"name": "general",  "orca": ["luna", "high"], "orca_alternatives": [["sonnet", "high"]], "claude": ["sonnet", "medium"], "codex": ["luna", "high"]},
-    "3": {"name": "complex",  "orca": ["sonnet", "high"], "orca_alternatives": [["terra", "high"]],   "claude": ["sonnet", "high"],   "codex": ["luna", "xhigh"]},
+    "1": {"name": "simple",   "orca": ["luna", "medium"],  "paseo": ["luna", "medium"], "claude": ["sonnet", "low"],    "codex": ["luna", "medium"]},
+    "2": {"name": "general",  "orca": ["luna", "high"], "orca_alternatives": [["sonnet", "high"]], "paseo": ["luna", "high"], "paseo_alternatives": [["sonnet", "high"]], "claude": ["sonnet", "medium"], "codex": ["luna", "high"]},
+    "3": {"name": "complex",  "orca": ["sonnet", "high"], "orca_alternatives": [["terra", "high"]], "paseo": ["sonnet", "high"], "paseo_alternatives": [["terra", "high"]],   "claude": ["sonnet", "high"],   "codex": ["luna", "xhigh"]},
     "4": {"name": "critical", "orca": ["opus", "high"],     "claude": ["opus", "high"],     "codex": ["sol", "high"],
-          "orca_alternatives": [["sol", "high"]]},
+          "orca_alternatives": [["sol", "high"]], "paseo": ["opus", "high"], "paseo_alternatives": [["sol", "high"]]},
     "5": {"name": "last_resort", "orca": ["fable", "high"],  "claude": ["fable", "high"],   "codex": ["astra", "high"],
-          "orca_alternatives": [["astra", "high"]],
+          "orca_alternatives": [["astra", "high"]], "paseo": ["fable", "high"], "paseo_alternatives": [["astra", "high"]],
           "note": "Reached only by escalation after LEVEL 4 fails twice on the same root problem. Never a starting level."}
   },
   "task_types": {
@@ -89,6 +95,25 @@
     "release_validation": [["luna", "high"], ["terra", "high"]],
     "docs": [["luna", "medium"], ["sonnet", "medium"]],
     "log_summary": [["luna", "low"]]
+  },
+  "paseo_profiles_note": "Names only. The real provider/model/mode/thinking of each profile lives in the user's Paseo configuration (list_profiles). expect is the (alias, effort) this map assumes for a task_types profile; role/level profiles expect the host entry. A router result that differs from the expectation reports no profile and the Owner configures create_agent directly.",
+  "paseo_profiles": {
+    "root-orchestrator":   {"role": "root_orchestrator"},
+    "project-coordinator": {"role": "project_coordinator"},
+    "dev-l1-simple":       {"level": 1},
+    "dev-l2-general":      {"level": 2},
+    "dev-l3-complex":      {"level": 3},
+    "l4-critical":         {"level": 4},
+    "l5-last-resort":      {"level": 5},
+    "review-codex-work":   {"task_types": ["code_review_codex"], "expect": ["sonnet", "medium"]},
+    "review-claude-work":  {"task_types": ["code_review_claude"], "expect": ["terra", "high"]},
+    "lookup":              {"role": "lookup"}
+  },
+  "review_mode": {
+    "task_types": ["review", "code_review_codex", "important_review_codex", "code_review_claude", "security_review"],
+    "write_block_required_task_types": ["security_review"],
+    "claude": {"modeId": "plan", "enforced": null, "note": "Described by Paseo as analysis without executing tools or edits; not verified by a write attempt."},
+    "codex": {"modeId": "auto", "features": {"plan_mode": true}, "enforced": false, "evidence": "git_status_diff_unchanged", "note": "plan_mode is an instruction-level limit, not a tool or sandbox block. Check that git status and the diff are unchanged before and after the review."}
   },
   "high_risk_types": ["security", "auth", "crypto", "production_infra", "destructive_db", "data_loss_migration", "data_integrity"],
   "escalation": {
