@@ -1,4 +1,18 @@
 {
+  "hosts": {
+    "claude": {
+      "default_blocks": [
+        "core",
+        "paseo"
+      ]
+    },
+    "codex": {
+      "default_blocks": [
+        "core",
+        "paseo"
+      ]
+    }
+  },
   "core": {
     "version": "1.5.0",
     "sources": {

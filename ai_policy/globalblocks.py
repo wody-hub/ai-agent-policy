@@ -22,7 +22,7 @@ HOSTS=('claude', 'codex')
 ORDER=('core', 'orca', 'paseo')
 NOTE='New sessions load the changed instruction files; running sessions keep the old text.'
 # Refusals that need a human decision exit 1; every other error exits 2.
-HUMAN_REFUSALS={'unrecognized_block', 'no_managed_block', 'partial_install'}
+HUMAN_REFUSALS={'unrecognized_block', 'no_managed_block', 'partial_install', 'unexpected_block'}
 TOKEN=re.compile(r'<!--\s*ai-agent-policy:')
 STRICT=re.compile(r'<!-- (ai-agent-policy:[A-Za-z0-9_-]+):(start|end)(?: version=([0-9A-Za-z][0-9A-Za-z._+-]*))? -->')
 BACKUP_NAME=re.compile(r'(.+)\.\d{8}T\d{6}Z\.([0-9a-f]{8})')
@@ -48,18 +48,28 @@ def marker_of(cfg, name, host):
     """Core carries a per-host marker (a claude core block is never mistaken for a codex one); orca and paseo are shared."""
     return cfg[name]['markers'][host] if name=='core' else cfg[name]['marker']
 
-def render_blocks(host, cfg=None):
-    """[(name, rendered block text)] in the fixed order core, orca, paseo."""
+def selected_blocks(host, cfg=None, with_orca=False):
+    """The block names to manage for a host, always in the order core, orca, paseo. The shipped default is core + paseo; orca is opt-in."""
+    if host not in HOSTS: raise PolicyError('host_invalid')
+    cfg=cfg or load_config()
+    try: names=set(cfg['hosts'][host]['default_blocks'])
+    except (KeyError, TypeError): raise PolicyError('blocks_config_invalid')
+    if not names<=set(ORDER) or 'core' not in names: raise PolicyError('blocks_config_invalid')
+    if with_orca: names.add('orca')
+    return [n for n in ORDER if n in names]
+
+def render_blocks(host, cfg=None, selected=None):
+    """[(name, rendered block text)] for the selected blocks (default: the host's default set) in the fixed order core, orca, paseo."""
     if host not in HOSTS: raise PolicyError('host_invalid')
     cfg=cfg or load_config()
     out=[]
-    for name in ORDER:
+    for name in (selected if selected is not None else selected_blocks(host, cfg)):
         c=cfg[name]; src=c['sources'][host] if 'sources' in c else c['source']
         out.append((name, render_block(marker_of(cfg, name, host), c['version'], _source_text(src))))
     return out
 
-def render(host, cfg=None):
-    return '\n'.join(text for _, text in render_blocks(host, cfg))
+def render(host, cfg=None, selected=None):
+    return '\n'.join(text for _, text in render_blocks(host, cfg, selected))
 
 # ---- target reading and scanning ----------------------------------------------------------------------------------------------------------
 def _read_target(path):
@@ -115,12 +125,15 @@ def scan(text, host, cfg):
     if open_ is not None: raise PolicyError('unbalanced_markers')
     return done
 
-def classify(regions):
+def classify(regions, selected):
+    """none | legacy | current | partial. A managed block of this tool that is present but not selected is refused (unexpected_block)."""
     names=[r[0] for r in regions]
     if not names: return 'none'
     if names==['legacy']: return 'legacy'
-    if names==list(ORDER): return 'current'
-    if sorted(names)==sorted(ORDER): raise PolicyError('out_of_order_markers')
+    if 'legacy' in names: return 'partial'
+    if names==list(selected): return 'current'
+    if any(n not in selected for n in names): raise PolicyError('unexpected_block')
+    if sorted(names)==sorted(selected): raise PolicyError('out_of_order_markers')
     return 'partial'
 
 def _outside(text, spans, collapse=False):
@@ -151,18 +164,20 @@ def _line_counts(a, b):
 
 def _e(s): return s.encode('utf-8')
 
-def analyze(raw, host, cfg=None):
+def analyze(raw, host, cfg=None, selected=None):
     cfg=cfg or load_config()
+    selected=list(selected) if selected is not None else selected_blocks(host, cfg)
     text=_decode(raw)
     regions=scan(text, host, cfg)
-    return text, regions, classify(regions), cfg
+    return text, regions, classify(regions, selected), cfg
 
 # ---- check --------------------------------------------------------------------------------------------------------------------------------
 def run_check(a):
     raw=_read_target(a.target)
-    text, regions, state, cfg=analyze(raw, a.host)
-    rendered=render_blocks(a.host, cfg)
-    blocks={n:{'present':False, 'up_to_date':False, 'version_expected':cfg[n]['version'], 'version_found':None} for n in ORDER}
+    selected=selected_blocks(a.host, None, a.with_orca)
+    text, regions, state, cfg=analyze(raw, a.host, None, selected)
+    rendered=render_blocks(a.host, cfg, selected)
+    blocks={n:{'present':False, 'up_to_date':False, 'version_expected':cfg[n]['version'], 'version_found':None} for n in selected}
     legacy={'present':False, 'known':None}
     for name, s, e, v in regions:
         if name=='legacy':
@@ -171,15 +186,16 @@ def run_check(a):
             blocks[name].update(present=True, version_found=v, up_to_date=text[s:e]==dict(rendered)[name])
     if state=='legacy' and not legacy['known']: state='unrecognized'
     up=state=='current' and all(b['up_to_date'] for b in blocks.values())
-    return {'schema':1, 'operation':'check', 'host':a.host, 'target':os.path.abspath(a.target), 'state':state, 'up_to_date':up,
+    return {'schema':1, 'operation':'check', 'host':a.host, 'selected_blocks':selected, 'target':os.path.abspath(a.target), 'state':state, 'up_to_date':up,
             'blocks':blocks, 'legacy':legacy, 'target_sha256':digest(raw)}, (0 if up else 1)
 
 # ---- sync plan ----------------------------------------------------------------------------------------------------------------------------
-def plan_sync(raw, target, host, cfg, *, overwrite_unrecognized=False):
-    text, regions, state, cfg=analyze(raw, host, cfg)
+def plan_sync(raw, target, host, cfg, *, selected=None, overwrite_unrecognized=False):
+    selected=list(selected) if selected is not None else selected_blocks(host, cfg)
+    text, regions, state, cfg=analyze(raw, host, cfg, selected)
     if state=='none': raise PolicyError('no_managed_block')
     if state=='partial': raise PolicyError('partial_install')
-    rendered=render_blocks(host, cfg)
+    rendered=render_blocks(host, cfg, selected)
     legacy=None
     if state=='legacy':
         _, s, e, v = regions[0]
@@ -192,7 +208,7 @@ def plan_sync(raw, target, host, cfg, *, overwrite_unrecognized=False):
     nregions=scan(new_text, host, cfg)
     collapse=state=='legacy'
     outside=_outside(text, [(s, e) for _, s, e, _ in regions], collapse)
-    if classify(nregions)!='current' or _outside(new_text, [(s, e) for _, s, e, _ in nregions], collapse)!=outside:
+    if classify(nregions, selected)!='current' or _outside(new_text, [(s, e) for _, s, e, _ in nregions], collapse)!=outside:
         raise PolicyError('outside_modified')
     if [new_text[s:e] for _, s, e, _ in nregions]!=[t for _, t in rendered]: raise PolicyError('render_mismatch')
     old_span=text[regions[0][1]:regions[-1][2]]
@@ -203,12 +219,12 @@ def plan_sync(raw, target, host, cfg, *, overwrite_unrecognized=False):
         else:
             _, s, e, _ = regions[i]; action='unchanged' if text[s:e]==block else 'update'
         blocks.append({'name':name, 'marker':marker_of(cfg, name, host), 'version':cfg[name]['version'], 'action':action, 'lines':block.count('\n')})
-    body={'schema':1, 'operation':'sync', 'host':host, 'target':os.path.abspath(target), 'state':state, 'overwrite_unrecognized':bool(overwrite_unrecognized),
+    body={'schema':1, 'operation':'sync', 'host':host, 'target':os.path.abspath(target), 'selected_blocks':selected, 'state':state, 'overwrite_unrecognized':bool(overwrite_unrecognized),
           'legacy':legacy, 'blocks':blocks, 'changes':sum(b['action']!='unchanged' for b in blocks),
           'diff':_line_counts(old_span, new_span),
           'region_before_sha256':digest(_e(old_span)), 'region_after_sha256':digest(_e(new_span)),
           'file_before_sha256':digest(raw), 'file_after_sha256':digest(new_raw)}
-    return {'body':body, 'plan_sha256':digest(encode(body)), 'new_raw':new_raw, 'new_text':new_text, 'rendered':rendered, 'cfg':cfg, 'host':host, 'outside':outside, 'collapse':collapse}
+    return {'body':body, 'plan_sha256':digest(encode(body)), 'new_raw':new_raw, 'new_text':new_text, 'rendered':rendered, 'cfg':cfg, 'host':host, 'selected':selected, 'outside':outside, 'collapse':collapse}
 
 def _verify_hash(given, plan_sha256):
     if given is None: return
@@ -280,7 +296,7 @@ def _verify_written(path, plan):
     """Re-read the replaced file: it must equal the expected bytes, its regions must equal the rendered blocks and the outside must be the original."""
     after=_read_target(path)
     if after!=plan['new_raw']: raise PolicyError('post_write_verification_failed')
-    text, regions, state, _ = analyze(after, plan['host'], plan['cfg'])
+    text, regions, state, _ = analyze(after, plan['host'], plan['cfg'], plan['selected'])
     if state!='current' or [text[s:e] for _, s, e, _ in regions]!=[t for _, t in plan['rendered']] or \
             _outside(text, [(s, e) for _, s, e, _ in regions], plan['collapse'])!=plan['outside']:
         raise PolicyError('post_write_verification_failed')
@@ -288,7 +304,7 @@ def _verify_written(path, plan):
 def run_sync(a):
     cfg=load_config()
     raw=_read_target(a.target)
-    plan=plan_sync(raw, a.target, a.host, cfg, overwrite_unrecognized=a.overwrite_unrecognized)
+    plan=plan_sync(raw, a.target, a.host, cfg, selected=selected_blocks(a.host, cfg, a.with_orca), overwrite_unrecognized=a.overwrite_unrecognized)
     _verify_hash(a.plan_sha256, plan['plan_sha256'])
     body=plan['body']
     if a.plan_sha256 is None: return _result(body, plan['plan_sha256'], False, dry_run=True), 0
@@ -352,11 +368,13 @@ def run_restore(a):
 def main(argv=None):
     p=argparse.ArgumentParser(prog='ai_policy.globalblocks'); sub=p.add_subparsers(dest='cmd', required=True)
     r=sub.add_parser('render', help='Print the three rendered blocks (core, orca, paseo) for a host')
-    r.add_argument('--host', required=True, choices=HOSTS)
+    r.add_argument('--host', required=True, choices=HOSTS); r.add_argument('--with-orca', action='store_true', help='also render the orca block (not part of the default set)')
     c=sub.add_parser('check', help='Read-only: report the managed-block state of a target file (exit 0 current, 1 needs change, 2 error)')
     c.add_argument('--host', required=True, choices=HOSTS); c.add_argument('--target', required=True, type=Path)
+    c.add_argument('--with-orca', action='store_true', help='manage the orca block too (default set: core + paseo)')
     s=sub.add_parser('sync', help='Replace the legacy block by the three blocks, or update them in place. Dry run unless --plan-sha256 is given')
     s.add_argument('--host', required=True, choices=HOSTS); s.add_argument('--target', required=True, type=Path)
+    s.add_argument('--with-orca', action='store_true', help='manage the orca block too (default set: core + paseo)')
     s.add_argument('--state-dir', type=Path, default=None, help='backups (default ${XDG_STATE_HOME:-~/.local/state}/ai-policy/global-blocks/<sha256(abs target path)[:8]>)')
     s.add_argument('--overwrite-unrecognized', action='store_true', help='replace a legacy block whose text is not a known release')
     s.add_argument('--plan-sha256', help='apply the plan whose hash a dry run printed; recomputed and refused on any difference')
@@ -367,7 +385,7 @@ def main(argv=None):
     a=p.parse_args(argv)
     try:
         if a.cmd=='render':
-            print(render(a.host), end=''); return 0
+            print(render(a.host, None, selected_blocks(a.host, None, a.with_orca)), end=''); return 0
         value, code={'check':run_check, 'sync':run_sync, 'restore':run_restore}[a.cmd](a)
     except PolicyError as e:
         print(json.dumps({'schema':1, 'error':str(e)}, sort_keys=True)); return 1 if str(e) in HUMAN_REFUSALS else 2

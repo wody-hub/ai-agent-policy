@@ -47,14 +47,21 @@ def apply(host, t, sd, *extra):
     assert code==0 and plan['dry_run'] is True, plan
     return sync(host, t, '--state-dir', sd, '--plan-sha256', plan['plan_sha256'], *extra)
 
+ALL=('core', 'orca', 'paseo')
+HO=[(h, o) for h in HOSTS for o in (False, True)]
+def R(host, orca=False): return gb.render(host, selected=gb.selected_blocks(host, cfg(), orca))
+def OA(orca): return ('--with-orca',) if orca else ()
+
 def files(d): return sorted(p.name for p in Path(d).iterdir())
 
 # ---- render ---------------------------------------------------------------------------------------------------------------------------------
-@pytest.mark.parametrize('host', HOSTS)
-def test_render_is_deterministic_with_exact_envelope(host):
-    a=gb.render(host); assert a==gb.render(host)
+@pytest.mark.parametrize('host, orca', HO)
+def test_render_is_deterministic_with_exact_envelope(host, orca):
+    a=R(host, orca); assert a==R(host, orca)
     c=cfg(); parts=[]
-    for n in ('core', 'orca', 'paseo'):
+    names=('core', 'orca', 'paseo') if orca else ('core', 'paseo')
+    assert gb.selected_blocks(host, c, orca)==list(names)
+    for n in names:
         mk=c[n]['markers'][host] if n=='core' else c[n]['marker']
         src=c[n]['sources'][host] if n=='core' else c[n]['source']
         body=(GLOBAL/src).read_text(encoding='utf-8').rstrip('\n')
@@ -62,8 +69,17 @@ def test_render_is_deterministic_with_exact_envelope(host):
     assert a=='\n'.join(parts)
     assert a.endswith('-->\n') and not a.endswith('\n\n')
     assert '\r' not in a
-    assert re.findall(r'^<!-- ai-agent-policy:(\S+) ', a, re.M)==['core-%s:start'%host, 'core-%s:end'%host, 'orca-policy:start', 'orca-policy:end', 'paseo-policy:start', 'paseo-policy:end']
+    assert re.findall(r'^<!-- ai-agent-policy:(\S+) ', a, re.M)==['core-%s:start'%host, 'core-%s:end'%host]+(['orca-policy:start', 'orca-policy:end'] if orca else [])+['paseo-policy:start', 'paseo-policy:end']
     assert (c['core']['version'], c['orca']['version'], c['paseo']['version'])==('1.5.0', '1.4.0', '0.1.1-draft')
+
+def test_default_set_is_core_plus_paseo_and_orca_is_opt_in(capsys):
+    c=cfg()
+    for h in HOSTS:
+        assert c['hosts'][h]['default_blocks']==['core', 'paseo'] and gb.selected_blocks(h, c)==['core', 'paseo'] and gb.selected_blocks(h, c, True)==['core', 'orca', 'paseo']
+        assert 'orca-policy' not in gb.render(h) and 'orca-policy' in R(h, True)
+        assert gb.main(['render', '--host', h])==0 and capsys.readouterr().out==gb.render(h)
+        assert gb.main(['render', '--host', h, '--with-orca'])==0 and capsys.readouterr().out==R(h, True)
+    assert len(R('claude', True).encode())>len(gb.render('claude').encode())
 
 def test_render_strips_trailing_newlines_of_body():
     assert gb.render_block('m:x', '1', 'a\nb\n\n\n')=='<!-- m:x:start version=1 -->\na\nb\n<!-- m:x:end -->\n'
@@ -155,23 +171,24 @@ def test_every_legacy_sentence_is_accounted_for_in_core_or_paseo(host):
     assert s[3]=='Do not infer a Paseo-managed task merely from the presence of the CLI.' and 'not evidence' in core_text
 
 # ---- legacy -> three blocks ----------------------------------------------------------------------------------------------------------------
-@pytest.mark.parametrize('host', HOSTS)
-def test_legacy_replaced_by_three_blocks_preserving_outside_bytes(tmp_path, host):
+@pytest.mark.parametrize('host, orca', HO)
+def test_legacy_replaced_by_selected_blocks_preserving_outside_bytes(tmp_path, host, orca):
+    n=3 if orca else 2
     t=target(tmp_path, host); before=t.read_bytes()
-    code, plan=sync(host, t, '--state-dir', tmp_path/'st')
+    code, plan=sync(host, t, '--state-dir', tmp_path/'st', *OA(orca))
     assert code==0 and plan['dry_run'] is True and plan['applied'] is False and plan['state']=='legacy'
     assert t.read_bytes()==before and not (tmp_path/'st').exists()
     assert plan['file_before_sha256']==sha(before) and plan['legacy']['known'] is True
-    assert [b['action'] for b in plan['blocks']]==['add']*3 and plan['changes']==3
-    assert plan['diff']['lines_after']==sum(b['lines'] for b in plan['blocks'])+2
+    assert [b['action'] for b in plan['blocks']]==['add']*n and plan['changes']==n and plan['selected_blocks']==gb.selected_blocks(host, cfg(), orca)
+    assert plan['diff']['lines_after']==sum(b['lines'] for b in plan['blocks'])+n-1
     assert 'content' not in json.dumps(plan) and '개인 지침' not in json.dumps(plan)
-    code, res=apply(host, t, tmp_path/'st')
+    code, res=apply(host, t, tmp_path/'st', *OA(orca))
     assert code==0 and res['applied'] is True and res['note']==gb.NOTE and res['file_after_sha256']==sha(t.read_bytes())
     after=t.read_bytes()
-    assert after==(PRE+gb.render(host)+POST).encode('utf-8')
+    assert after==(PRE+R(host, orca)+POST).encode('utf-8') and (b'orca-policy' in after)==orca
     assert after.startswith(PRE.encode('utf-8')) and after.endswith(POST.encode('utf-8'))
-    c, chk=cli('check', '--host', host, '--target', t)
-    assert c==0 and chk['state']=='current' and chk['up_to_date'] is True and all(b['present'] and b['up_to_date'] for b in chk['blocks'].values())
+    c, chk=cli('check', '--host', host, '--target', t, *OA(orca))
+    assert c==0 and chk['state']=='current' and chk['up_to_date'] is True and len(chk['blocks'])==n and all(b['present'] and b['up_to_date'] for b in chk['blocks'].values())
 
 def test_check_reports_legacy_none_unrecognized_partial_and_errors(tmp_path):
     t=target(tmp_path)
@@ -213,32 +230,65 @@ def test_outside_bytes_guard_blocks_a_corrupting_rewrite(tmp_path, monkeypatch):
     c, r=sync('claude', t, '--plan-sha256', '0'*64)
     assert c==2 and r['error']=='outside_modified' and t.read_bytes()==before
 
+# ---- block sets --------------------------------------------------------------------------------------------------------------------------
+def test_plan_hash_binds_the_selected_block_set(tmp_path):
+    t=target(tmp_path); b=t.read_bytes()
+    d=sync('claude', t)[1]; o=sync('claude', t, '--with-orca')[1]
+    assert d['plan_sha256']!=o['plan_sha256'] and d['selected_blocks']==['core', 'paseo'] and o['selected_blocks']==['core', 'orca', 'paseo']
+    code, r=sync('claude', t, '--state-dir', tmp_path/'st', '--with-orca', '--plan-sha256', d['plan_sha256'])
+    assert code==2 and r['error']=='plan_sha256_mismatch' and t.read_bytes()==b and not (tmp_path/'st').exists()
+
+def test_switching_block_sets_is_refused_and_restore_recovers(tmp_path):
+    t=target(tmp_path, name='a.md'); orig=t.read_bytes()
+    # with-orca install, then a default sync would drop the orca block: refused
+    code, res=apply('claude', t, tmp_path/'st', '--with-orca'); assert code==0 and b'orca-policy' in t.read_bytes()
+    withorca=t.read_bytes(); m=os.stat(t).st_mtime_ns
+    for extra in ((), ('--plan-sha256', '0'*64), ('--overwrite-unrecognized',)):
+        code, r=sync('claude', t, '--state-dir', tmp_path/'st', *extra); assert code==1 and r['error']=='unexpected_block'
+    code, r=cli('check', '--host', 'claude', '--target', t); assert code==1 and r['error']=='unexpected_block'
+    assert t.read_bytes()==withorca and os.stat(t).st_mtime_ns==m
+    # default install, then adding orca would insert a block into a managed install: refused as partial
+    t2=target(tmp_path, name='b.md'); apply('claude', t2, tmp_path/'st2'); default=t2.read_bytes()
+    code, r=sync('claude', t2, '--with-orca'); assert code==1 and r['error']=='partial_install'
+    code, r=cli('check', '--host', 'claude', '--target', t2, '--with-orca'); assert code==1 and r['state']=='partial'
+    assert t2.read_bytes()==default
+    # the supported way back is restore
+    code, plan=restore(t, Path(res['backup']), tmp_path/'st'); code, r=restore(t, Path(res['backup']), tmp_path/'st', '--plan-sha256', plan['plan_sha256'])
+    assert code==0 and t.read_bytes()==orig
+    code, r=apply('claude', t, tmp_path/'st'); assert code==0 and b'orca-policy' not in t.read_bytes()
+
+def test_default_install_never_writes_the_orca_block(tmp_path):
+    for host in HOSTS:
+        t=target(tmp_path, host, name=host+'.md'); apply(host, t, tmp_path/('st'+host)); txt=t.read_text(encoding='utf-8')
+        assert 'orca-policy' not in txt and 'ai-agent-policy:core-%s:start'%host in txt and 'ai-agent-policy:paseo-policy:start' in txt
+        assert cli('check', '--host', host, '--target', t)[0]==0
+
 # ---- idempotence and in-place update ----------------------------------------------------------------------------------------------------------
 @pytest.mark.parametrize('host', HOSTS)
 def test_rerun_when_current_writes_nothing(tmp_path, host):
     t=target(tmp_path, host); apply(host, t, tmp_path/'st')
     os.utime(t, ns=(1_000_000_000, 1_000_000_000)); b=t.read_bytes(); m=os.stat(t).st_mtime_ns
     backups=files(tmp_path/'st'/'backups')
-    code, plan=sync(host, t, '--state-dir', tmp_path/'st'); assert code==0 and plan['changes']==0 and [x['action'] for x in plan['blocks']]==['unchanged']*3
+    code, plan=sync(host, t, '--state-dir', tmp_path/'st'); assert code==0 and plan['changes']==0 and [x['action'] for x in plan['blocks']]==['unchanged']*2
     code, res=sync(host, t, '--state-dir', tmp_path/'st', '--plan-sha256', plan['plan_sha256'])
     assert code==0 and res['applied'] is False and res['dry_run'] is False
     assert t.read_bytes()==b and os.stat(t).st_mtime_ns==m and files(tmp_path/'st'/'backups')==backups and files(tmp_path)==sorted(['CLAUDE.md' if host=='claude' else 'AGENTS.md', 'st'])
 
 def test_current_blocks_update_in_place_keeping_text_between_and_around(tmp_path):
-    blocks=[t for _, t in gb.render_blocks('claude')]
+    blocks=[t for _, t in gb.render_blocks('claude', selected=ALL)]
     core=blocks[0].replace('version=1.5.0', 'version=1.0.0').replace('Sonnet is the default', 'Sonnet was the default')
     orca=blocks[1].replace('version=1.4.0', 'version=0.9.0')
     mid=core+'\n사이 텍스트 ✓\n\n'+orca+'\n\n\n'+blocks[2]
     t=target(tmp_path, mid=mid); before=t.read_bytes()
-    c, chk=cli('check', '--host', 'claude', '--target', t)
+    c, chk=cli('check', '--host', 'claude', '--target', t, '--with-orca')
     assert c==1 and chk['state']=='current' and chk['blocks']['core']['up_to_date'] is False and chk['blocks']['paseo']['up_to_date'] is True and chk['blocks']['core']['version_found']=='1.0.0'
-    code, plan=sync('claude', t); assert [b['action'] for b in plan['blocks']]==['update', 'update', 'unchanged'] and plan['changes']==2
-    code, res=apply('claude', t, tmp_path/'st'); assert code==0
+    code, plan=sync('claude', t, '--with-orca'); assert [b['action'] for b in plan['blocks']]==['update', 'update', 'unchanged'] and plan['changes']==2
+    code, res=apply('claude', t, tmp_path/'st', '--with-orca'); assert code==0
     assert t.read_bytes()==(PRE+blocks[0]+'\n사이 텍스트 ✓\n\n'+blocks[1]+'\n\n\n'+blocks[2]+POST).encode('utf-8')
     assert (tmp_path/'st'/'backups').exists() and any((tmp_path/'st'/'backups').iterdir())
 
 # ---- refusals --------------------------------------------------------------------------------------------------------------------------------
-def rb(i): return gb.render_blocks('claude')[i][1]
+def rb(i): return gb.render_blocks('claude', selected=ALL)[i][1]
 L='<!-- ai-agent-policy:claude:start version=1.4.0 -->\ntext\n<!-- ai-agent-policy:claude:end -->\n'
 CASES={
     'duplicate_legacy': (L+'\nmid\n'+L, 'duplicate_markers'),
@@ -249,24 +299,26 @@ CASES={
     'missing_end': (L.replace('<!-- ai-agent-policy:claude:end -->\n', ''), 'unbalanced_markers'),
     'end_without_start': ('x\n<!-- ai-agent-policy:claude:end -->\n', 'unbalanced_markers'),
     'mismatched_end': (L.replace('claude:end', 'core-claude:end'), 'unbalanced_markers'),
-    'out_of_order': (rb(1)+'\n'+rb(0)+'\n'+rb(2), 'out_of_order_markers'),
+    'out_of_order': (rb(2)+'\n'+rb(0), 'out_of_order_markers'),
     'malformed_trailing_space': (L.replace('1.4.0 -->', '1.4.0 --> '), 'malformed_marker'),
     'malformed_inline': ('see <!-- ai-agent-policy:claude:start version=1.4.0 --> here\n', 'malformed_marker'),
     'malformed_end_with_version': (L.replace('claude:end', 'claude:end version=1'), 'malformed_marker'),
     'partial_legacy_plus_core': (L+'\n'+rb(0), 'partial_install'),
     'partial_core_only': (rb(0), 'partial_install'),
-    'partial_two_new': (rb(0)+'\n'+rb(1), 'partial_install'),
+    'partial_two_new_with_orca': (rb(0)+'\n'+rb(1), 'partial_install', ('--with-orca',)),
+    'orca_block_not_selected': (rb(0)+'\n'+rb(1)+'\n'+rb(2), 'unexpected_block'),
+    'out_of_order_with_orca': (rb(0)+'\n'+rb(2)+'\n'+rb(1), 'out_of_order_markers', ('--with-orca',)),
     'partial_legacy_plus_three': (L+'\n'+gb.render('claude'), 'partial_install'),
     'no_managed_block': ('# nothing managed here\n', 'no_managed_block'),
 }
 
 @pytest.mark.parametrize('case', sorted(CASES))
 def test_structural_refusals_write_nothing(tmp_path, case):
-    mid, err=CASES[case]
+    mid, err, *rest=CASES[case]; extra=rest[0] if rest else ()
     t=target(tmp_path, mid=mid); before=t.read_bytes(); m=os.stat(t).st_mtime_ns
-    code, r=sync('claude', t, '--state-dir', tmp_path/'st')
+    code, r=sync('claude', t, '--state-dir', tmp_path/'st', *extra)
     assert r['error']==err and code==(1 if err in gb.HUMAN_REFUSALS else 2)
-    code, r=sync('claude', t, '--state-dir', tmp_path/'st', '--plan-sha256', '1'*64)
+    code, r=sync('claude', t, '--state-dir', tmp_path/'st', '--plan-sha256', '1'*64, *extra)
     assert r['error']==err and code in (1, 2)
     assert t.read_bytes()==before and os.stat(t).st_mtime_ns==m and files(tmp_path)==['CLAUDE.md'] and not (tmp_path/'st').exists()
 
