@@ -73,15 +73,7 @@
 - Agent Teams와 Ultracode는 자동으로 활성화하지 않는다. 존재하지 않는 동시 실행 설정 키를 만들지 않는다.
 
 검토와 안전:
-- Paseo 프로젝트 정책이 설치되고 Paseo 업무 context가 확인되면(부모 에이전트의 배정 메시지와 부모 라벨 `paseo.parent-agent-id`가 증거이며, `PASEO_AGENT_ID` 환경 변수·Paseo CLI 설치·Paseo MCP 도구 존재만으로는 Paseo 업무로 판정하지 않는다) 실행 위치·Root/Coordinator/Worker 역할·모델 선택·정산·최소 Task 등록 부트스트랩은 그 정책을 따른다. 오케스트레이터는 Paseo 도구가 있는 Claude(Sonnet high)만 맡고 Codex는 Worker로만 쓴다. Codex Worker는 Paseo worktree에서 commit하지 않고 변경 파일·diff를 보고하며 commit은 Claude Worker 또는 Owner가 한다. Worker는 재위임하지 않으며 Owner(부모 에이전트)가 자식 목록을 점검한다.
-- Paseo 모델 선택은 로컬 정본 라우터 `--host paseo`의 `paseo_create_agent`(provider·modeId·thinkingOptionId)와 `paseo_profile`을 시작 구성으로 삼고 `create_agent`에 복사한다. 프로필은 시작 구성일 뿐 라우팅·시도 횟수·승격·동시 실행 한도는 Owner가 판정한다. 리뷰어는 Claude `plan` 모드이거나, Codex는 `plan_mode` 권장 + 리뷰 전후 `git status`·diff 무변경 검사를 필수로 하며 읽기 전용이 강제된다고 주장하지 않는다. 요청값과 확인한 실행값을 구분해 기록한다.
-- Paseo 완료 알림은 턴 종료 신호이지 업무 완료가 아니다. 수락 응답은 시작의 증거가 아니다. 결과와 검증 근거를 확보하고 Worker가 `running`이 아님을 확인한 뒤 `archive_agent`로 정리한다. relay 켜기·플러그인 설치·`archive_workspace`·schedule 생성·권한 모드 상향·비밀번호/CORS 변경은 Human Gate로 사용자 결정을 받으며 Paseo 설정을 임의로 넓히지 않는다. 같은 정산·release 원칙이 병행기 Orca 업무에는 Orca 규칙으로 적용된다.
-- (병행기·보관: 기존 Orca가 소유한 진행 중 Run에만 적용) Orca 프로젝트 정책이 설치되고 Orca 업무 context가 확인되면 실행 위치·Main/Controller/Worker 역할·교차 도구 모델 선택·최소 Task 등록 부트스트랩은 그 정책을 따른다. 작은 업무 직접 실행은 관리되는 Worker에게 적용하며 Worker의 재위임은 명시적 승인과 추적 가능한 실행에 한정한다. 고위험 분석은 선택한 Sol high 또는 Opus high가 맡고 위험에 따라 독립 검토를 추가한다. 상위 지침의 제한은 보존한다. Orca·Paseo 밖에서는 이 전역 전략을 유지한다.
-- (병행기·보관: 기존 Orca가 소유한 진행 중 Run에만 적용) Orca 업무는 단일 프로젝트·단일 Worker·짧고 동기적인 저위험 목표라면 Main이 Controller 역할을 겸해 Orca Worker 하나를 직접 조율한다. 실제 조사·구현·검증은 계속 관리 Worker가 수행한다. 복수 프로젝트, 병렬 Worker, 장기 실행, 고위험·복잡한 조율에는 프로젝트별 Controller를 둔다. 어느 경로든 Run 소유자를 하나로 정하고 해당 Run으로 조율한다. Orca 실행 재시도(도구·환경·Worker 중단)는 같은 원인에 최대 3회, 모델 판단 실패의 승격 기준은 2회다. Orca 관리 Worker 완료 시 결과와 검증을 보존하고 정확한 Dispatch의 settlement를 확인한다. 소유한 settled Dispatch는 결과를 회수한 직후 release하고 release 상태를 기록한다. active·uncertain·unsettled·사용자 소유·미확인 Dispatch는 release하지 않는다. 전달·대기·정산·예외 세부 규칙은 [Orca Worker lifecycle rulebook](~/Project/ETC/ai-agent-policy/docs/orca-worker-lifecycle.md)을 따른다.
-- (병행기·보관: 기존 Orca가 소유한 진행 중 Run에만 적용) Orca 모델 선택은 로컬 정본 라우터의 역할·작업 유형 경로를 따른다. 새 Main Terra high, Controller Luna high, 일반 구현 Luna high, 복잡 구현 Sonnet high가 기본이다. 기존 독립 리뷰는 Codex 구현물에 Sonnet medium, Claude 구현물에 Terra high를 우선한다. 고위험 전문 경로와 프로젝트의 명시적 지정이 우선한다. Orca 밖의 전역 경로는 유지한다.
-- (병행기·보관: 기존 Orca가 소유한 진행 중 Run에만 적용) Orca 관리 Run의 Controller를 재개·인계할 때는 수명주기 규칙의 Controller resume and handoff 절차를 따른다. `consumer_fenced`에서는 메일 소비·상태 변경을 중단하고 Run의 홈과 현재 바인딩을 조회한다. 적격 Controller 세션에서 명시적으로 `run-use`로 바인딩을 확인한 뒤 조율을 재개한다.
-- (병행기·보관: 기존 Orca가 소유한 진행 중 Run에만 적용) 로컬 설치 정책이 필요한 Orca 프로젝트는 일반 Worker 배정 전에 대상 worktree의 설치·로딩 상태를 확인한다. 누락이나 미확인이면 Worktree readiness before dispatch 절차에 따라 기존 Task·worktree를 보존하고 설치 전용 복구로 넘긴다. 원인이 해소됐다는 증거를 얻기 전 같은 조건에서 재생성·재배정하지 않는다.
-- (병행기·보관: 기존 Orca가 소유한 진행 중 Run에만 적용) 실제 작업 맥락에서 Orca 관리 업무로 확인된 경우, 작업 시작 전에 완료 조건과 운영 반영 필요 여부를 정한다. 운영 반영이 필요한 업무는 실제 대상 환경, 반영된 릴리스 식별자, 반영 후 정상 동작 확인 결과와 근거를 모두 확인한 뒤 완료로 보고한다. 배포 대기·실패·미확인은 남은 조치와 함께 기록한다. 운영 반영이 없는 업무는 합의한 완료 조건과 필수 검증 결과로 닫는다. 관리 Worker와 Run 소유자는 위 수명주기 규칙의 Worker 결과 및 Task 인계 양식을 따른다. 프로젝트 Task 정책과 Human Gate는 계속 적용한다.
+- 환경별 정책(Paseo·Orca)은 전역 코어와 분리된 독립 블록이며 `policy/global/paseo.md`·`policy/global/orca.md`에서 생성한다(`docs/global-blocks.md`). 이 코어 지침에 Orca·Paseo 규칙을 의역해 넣지 않는다.
 - 프로젝트에 Task 정책이 설치돼 있으면 업무 ID·실제 브랜치 매핑·문서 기록·완료 게이트를 따른다. 이 전역 모델 정책 설치 자체가 Task 정책이나 Orca 설치를 요구하지는 않는다.
 - 완료 보고에는 변경 사항, 실제 검증 명령과 결과, 남은 위험을 포함한다.
 - 메인은 완료 조건, 관련 diff, 검증 근거, 통합 동작을 확인한다.
@@ -101,9 +93,7 @@
 
 영구 적용 방법:
 1. 변경 대상 파일을 백업하고 관련 없는 개인 지침, 설정, 플러그인, 훅과 권한은 보존한다.
-2. 사용자 전역 CLAUDE.md에 아래 관리 영역을 사용해 전략을 간결하게 반영한다. 이미 있다면 중복 추가하지 않고 해당 영역만 갱신한다.
-   <!-- ai-agent-policy:claude:start version=1.4.0 -->
-   <!-- ai-agent-policy:claude:end -->
+2. 변경 대상 전역 CLAUDE.md를 백업한 뒤 `python3 -B -m ai_policy.globalblocks sync --host claude --target <CLAUDE.md 경로>`를 실행(드라이런)해 계획을 검토하고, 이상이 없으면 출력된 `plan_sha256`을 `--plan-sha256`에 넘겨 적용한다. 코어·Orca·Paseo 관리 블록(`policy/global/`에서 생성)만 갱신되고 블록 밖 개인 지침은 그대로 유지되며, 문구를 직접 의역해 넣지 않는다.
 3. 기존 모델 라우팅 지침이 새 전략과 충돌하면 관련 부분을 교체한다. 프로젝트별 지침은 임의로 대량 수정하지 않는다.
 4. 사용자 settings.json의 model을 실제 접근 가능한 claude-sonnet-5-5로 설정한다. 현재 버전의 지원 형식을 확인하여 modelSettings 등 모델별 추론 설정에 Sonnet medium, Opus high를 저장한다.
 5. 사용자 최상위 effortLevel만으로 최신 모델의 추론 설정이 적용된다고 가정하지 않는다. 실제 우선순위와 유효값을 확인한다. 단순히 modelSettings가 JSON으로 파싱된다는 이유로 CLI 적용 성공을 주장하지 않는다.
