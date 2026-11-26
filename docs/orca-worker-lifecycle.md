@@ -19,6 +19,27 @@ This rulebook applies to Orca-supervised managed Workers. Project Task registrat
 
 ## Worktree readiness before dispatch
 
+For a newly created managed worktree in a project that requires local policy,
+creation includes a separate policy-setup step before ordinary Worker dispatch.
+The project owner maintains a versioned, reviewed installation manifest naming
+the policy entrypoints, policy snapshot and manifest, guard, and applicable
+client adapters. On the target execution host, use the project's supported
+installer or, when permitted by the project, have the responsible AI copy the
+explicitly listed files from the verified source without overwriting existing
+files. Do not assume Git worktree creation copied ignored files. Verify copied
+bytes and modes against the source and manifest. Record the actual source version, file
+hashes, target worktree and installation result. Setup must preserve pre-existing
+files and user changes, refuse unexpected differences rather than overwrite
+them, and provide a documented recovery or rollback path. Do not copy secrets,
+private Task contexts, credentials, or unrelated configuration from a parent.
+
+Treat worktree creation, policy file installation, client trust and actual hook
+loading as distinct states. Report ready only after the readiness checks below
+pass. If no supported installer or project-permitted direct copy is available,
+retain the worktree, report policy setup pending, and use the project's
+authorized installation or recovery path before dispatch.
+Do not silently replace or bypass a project's stricter setup requirements.
+
 1. When a project requires local policy installation, the Run owner checks the exact target worktree on its execution host before assigning or resuming an ordinary Worker. Verify the actual repository, branch, creation base, required parent and Task mapping against project policy. Use the project's approved install manifest or equivalent to verify the required entry instructions, policy files, guard and selected client's hook configuration. Record separately whether the files are valid and whether required hooks are trusted and load in the intended execution path. A checkout, `setup=run` request or setup receipt alone does not establish policy readiness. Projects without such an installation requirement follow their existing start checks.
 2. If required files are missing, record “policy installation required”. If the setup, installed bytes or hook loading cannot be verified, record the specific blocker and stop ordinary dispatch. Preserve the current Task, worktree and changes. Record the cause and follow the project's authorized install or recovery path on the existing worktree if eligible. If that path is unavailable or unauthorized, report the blocker. Do not regenerate the worktree, switch clients, or retry the same launch to avoid the check. Recheck when installation, configuration or other evidence relevant to the blocker changes.
 3. Before ordinary work resumes, verify the installed version and manifest, confirm policy and hook loading in a fresh session for the selected client, and verify the required allowed and denied cases through the project's supported checks. Deliver the ordinary work prompt only after these checks pass. When Orca cannot wait for setup, separate worktree creation and Worker assignment. Only a project's authorized installation or recovery task may proceed under its limited setup exception.
