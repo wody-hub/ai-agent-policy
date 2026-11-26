@@ -37,7 +37,7 @@ Preserve user-owned work. Follow project Task IDs, branch mappings, documentatio
 
 ## Orchestration environments
 
-Orca-managed and Paseo-managed work are governed by separate policy blocks (`ai-agent-policy:orca-policy`, `ai-agent-policy:paseo-policy`). Each applies only when its own installed project policy and the actual task context both confirm that environment; a CLI, an environment variable or an MCP tool being present is not evidence. Outside both, this core policy applies unchanged.
+Orca-managed Runs still owned by the existing Orca follow the project's installed Orca policy and `~/Project/ETC/ai-agent-policy/docs/orca-worker-lifecycle.md`; Paseo-managed work follows the Paseo policy block (`ai-agent-policy:paseo-policy`). Each applies only when its own installed project policy and the actual task context both confirm that environment; a CLI, an environment variable or an MCP tool being present is not evidence. Outside both, this core policy applies unchanged.
 
 ## Claude Code and independent review
 

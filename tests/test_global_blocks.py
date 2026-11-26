@@ -113,7 +113,10 @@ def test_core_mentions_environments_only_in_orchestration_paragraph(host):
     rest=body[:i]+(body[j:] if j!=-1 else '')
     assert not re.search('orca|paseo', rest, re.I)
     assert '병행기' not in body and '1.5.0' in body.splitlines()[0]
-    assert 'ai-agent-policy:orca-policy' in para and 'ai-agent-policy:paseo-policy' in para
+    body_para=para.split('\n', 2)[2].strip()
+    assert '\n' not in body_para   # one short paragraph
+    assert 'existing Orca' in body_para and '~/Project/ETC/ai-agent-policy/docs/orca-worker-lifecycle.md' in body_para and '`ai-agent-policy:paseo-policy`' in body_para
+    assert 'not evidence' in body_para and 'this core policy applies unchanged' in body_para and len(body_para)<=700
 
 @pytest.mark.parametrize('host', HOSTS)
 def test_sources_contain_no_marker_tokens_and_no_cr(host):
