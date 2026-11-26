@@ -55,13 +55,14 @@ def test_render_is_deterministic_with_exact_envelope(host):
     a=gb.render(host); assert a==gb.render(host)
     c=cfg(); parts=[]
     for n in ('core', 'orca', 'paseo'):
+        mk=c[n]['markers'][host] if n=='core' else c[n]['marker']
         src=c[n]['sources'][host] if n=='core' else c[n]['source']
         body=(GLOBAL/src).read_text(encoding='utf-8').rstrip('\n')
-        parts.append('<!-- %s:start version=%s -->\n%s\n<!-- %s:end -->\n'%(c[n]['marker'], c[n]['version'], body, c[n]['marker']))
+        parts.append('<!-- %s:start version=%s -->\n%s\n<!-- %s:end -->\n'%(mk, c[n]['version'], body, mk))
     assert a=='\n'.join(parts)
     assert a.endswith('-->\n') and not a.endswith('\n\n')
     assert '\r' not in a
-    assert re.findall(r'^<!-- ai-agent-policy:(\S+) ', a, re.M)==['core:start', 'core:end', 'orca-policy:start', 'orca-policy:end', 'paseo-policy:start', 'paseo-policy:end']
+    assert re.findall(r'^<!-- ai-agent-policy:(\S+) ', a, re.M)==['core-%s:start'%host, 'core-%s:end'%host, 'orca-policy:start', 'orca-policy:end', 'paseo-policy:start', 'paseo-policy:end']
     assert (c['core']['version'], c['orca']['version'], c['paseo']['version'])==('1.5.0', '1.4.0', '0.1.1-draft')
 
 def test_render_strips_trailing_newlines_of_body():
@@ -181,6 +182,22 @@ def test_check_reports_legacy_none_unrecognized_partial_and_errors(tmp_path):
     t5=tmp_path/'d.md'; t5.write_text(legacy('claude')*2); c, r=cli('check', '--host', 'claude', '--target', t5); assert c==2 and r['error']=='duplicate_markers'
     c, r=cli('check', '--host', 'claude', '--target', tmp_path/'missing.md'); assert c==2 and r['error']=='target_unavailable'
 
+@pytest.mark.parametrize('host, other', (('claude', 'codex'), ('codex', 'claude')))
+def test_migrated_file_refuses_the_other_hosts_sync_and_check(tmp_path, host, other):
+    t=target(tmp_path, host); apply(host, t, tmp_path/'st')
+    migrated=t.read_bytes(); m=os.stat(t).st_mtime_ns; before=files(tmp_path)
+    assert 'ai-agent-policy:core-%s:start'%host in migrated.decode() and 'ai-agent-policy:core-%s'%other not in migrated.decode()
+    for extra in ((), ('--plan-sha256', '0'*64), ('--overwrite-unrecognized',)):
+        code, r=sync(other, t, '--state-dir', tmp_path/'st2', *extra)
+        assert code==2 and r['error']=='host_mismatch'
+    code, r=cli('check', '--host', other, '--target', t); assert code==2 and r['error']=='host_mismatch'
+    assert t.read_bytes()==migrated and os.stat(t).st_mtime_ns==m and files(tmp_path)==before and not (tmp_path/'st2').exists()
+    assert sync(host, t)[0]==0   # the right host still sees it as current
+
+def test_core_markers_are_per_host():
+    c=cfg(); assert c['core']['markers']=={'claude':'ai-agent-policy:core-claude', 'codex':'ai-agent-policy:core-codex'}
+    assert gb.render('claude')!=gb.render('codex') and 'core-codex' not in gb.render('claude') and 'core-claude' not in gb.render('codex')
+
 def test_wrong_host_legacy_is_not_recognized(tmp_path):
     t=target(tmp_path, 'claude'); c, r=sync('codex', t)
     assert c==1 and r['error']=='no_managed_block'
@@ -226,12 +243,12 @@ L='<!-- ai-agent-policy:claude:start version=1.4.0 -->\ntext\n<!-- ai-agent-poli
 CASES={
     'duplicate_legacy': (L+'\nmid\n'+L, 'duplicate_markers'),
     'duplicate_core': (rb(0)+rb(0), 'duplicate_markers'),
-    'nested_legacy_in_core': ('<!-- ai-agent-policy:core:start version=1 -->\n'+L+'<!-- ai-agent-policy:core:end -->\n', 'nested_markers'),
-    'block_containing_other_block_marker': (rb(0).replace('\n<!-- ai-agent-policy:core:end -->', '\n<!-- ai-agent-policy:orca-policy:start version=1 -->\n<!-- ai-agent-policy:core:end -->'), 'nested_markers'),
+    'nested_legacy_in_core': ('<!-- ai-agent-policy:core-claude:start version=1 -->\n'+L+'<!-- ai-agent-policy:core-claude:end -->\n', 'nested_markers'),
+    'block_containing_other_block_marker': (rb(0).replace('\n<!-- ai-agent-policy:core-claude:end -->', '\n<!-- ai-agent-policy:orca-policy:start version=1 -->\n<!-- ai-agent-policy:core:end -->'), 'nested_markers'),
     'foreign_marker_inside_block': ('<!-- ai-agent-policy:claude:start version=1 -->\n<!-- ai-agent-policy:other:start version=1 -->\n<!-- ai-agent-policy:claude:end -->\n', 'nested_markers'),
     'missing_end': (L.replace('<!-- ai-agent-policy:claude:end -->\n', ''), 'unbalanced_markers'),
     'end_without_start': ('x\n<!-- ai-agent-policy:claude:end -->\n', 'unbalanced_markers'),
-    'mismatched_end': (L.replace('claude:end', 'core:end'), 'unbalanced_markers'),
+    'mismatched_end': (L.replace('claude:end', 'core-claude:end'), 'unbalanced_markers'),
     'out_of_order': (rb(1)+'\n'+rb(0)+'\n'+rb(2), 'out_of_order_markers'),
     'malformed_trailing_space': (L.replace('1.4.0 -->', '1.4.0 --> '), 'malformed_marker'),
     'malformed_inline': ('see <!-- ai-agent-policy:claude:start version=1.4.0 --> here\n', 'malformed_marker'),

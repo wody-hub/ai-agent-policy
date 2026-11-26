@@ -44,6 +44,10 @@ def load_config(source_dir=None):
 def render_block(marker, version, body):
     return '<!-- %s:start version=%s -->\n%s\n<!-- %s:end -->\n'%(marker, version, body.rstrip('\n'), marker)
 
+def marker_of(cfg, name, host):
+    """Core carries a per-host marker (a claude core block is never mistaken for a codex one); orca and paseo are shared."""
+    return cfg[name]['markers'][host] if name=='core' else cfg[name]['marker']
+
 def render_blocks(host, cfg=None):
     """[(name, rendered block text)] in the fixed order core, orca, paseo."""
     if host not in HOSTS: raise PolicyError('host_invalid')
@@ -51,7 +55,7 @@ def render_blocks(host, cfg=None):
     out=[]
     for name in ORDER:
         c=cfg[name]; src=c['sources'][host] if 'sources' in c else c['source']
-        out.append((name, render_block(c['marker'], c['version'], _source_text(src))))
+        out.append((name, render_block(marker_of(cfg, name, host), c['version'], _source_text(src))))
     return out
 
 def render(host, cfg=None):
@@ -82,7 +86,9 @@ def _decode(raw):
     return text
 
 def _names(host, cfg):
-    return {cfg['legacy'][host]['marker']:'legacy', cfg['core']['marker']:'core', cfg['orca']['marker']:'orca', cfg['paseo']['marker']:'paseo'}
+    names={cfg['legacy'][host]['marker']:'legacy', cfg['orca']['marker']:'orca', cfg['paseo']['marker']:'paseo'}
+    for h in HOSTS: names[marker_of(cfg, 'core', h)]='core' if h==host else 'foreign_core'
+    return names
 
 def scan(text, host, cfg):
     """Completed managed regions [(name, start, end, version)] in file order; structural problems raise. Offsets are character offsets of whole lines,
@@ -95,6 +101,7 @@ def scan(text, host, cfg):
             m=STRICT.fullmatch(line)
             if not m or (m.group(2)=='start')!=(m.group(3) is not None): raise PolicyError('malformed_marker')
             name=names.get(m.group(1))
+            if name=='foreign_core': raise PolicyError('host_mismatch')   # this target already carries the other host's core block
             if name is None:
                 if open_ is not None: raise PolicyError('nested_markers')
             elif m.group(2)=='start':
@@ -195,7 +202,7 @@ def plan_sync(raw, target, host, cfg, *, overwrite_unrecognized=False):
         if state=='legacy': action='add'
         else:
             _, s, e, _ = regions[i]; action='unchanged' if text[s:e]==block else 'update'
-        blocks.append({'name':name, 'marker':cfg[name]['marker'], 'version':cfg[name]['version'], 'action':action, 'lines':block.count('\n')})
+        blocks.append({'name':name, 'marker':marker_of(cfg, name, host), 'version':cfg[name]['version'], 'action':action, 'lines':block.count('\n')})
     body={'schema':1, 'operation':'sync', 'host':host, 'target':os.path.abspath(target), 'state':state, 'overwrite_unrecognized':bool(overwrite_unrecognized),
           'legacy':legacy, 'blocks':blocks, 'changes':sum(b['action']!='unchanged' for b in blocks),
           'diff':_line_counts(old_span, new_span),
