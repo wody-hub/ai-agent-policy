@@ -7,19 +7,19 @@
     "ai_policy/install.py": "8d52707c41d09814a15927df6303519cf592dbada66fddcabdfcfc956e00e7f4",
     "policy/adapters/paseo-claude.md": "4bb456e12e54ccfc511278fb52cff943732bccfcc6d975b54031ce810f9c3887",
     "policy/adapters/paseo-codex.md": "4bb456e12e54ccfc511278fb52cff943732bccfcc6d975b54031ce810f9c3887",
-    "policy/paseo-common.md": "57304389108dd0d00ca363ce0abd3670b9674750f61439dc58d0c0de422bb004"
+    "policy/paseo-common.md": "436b79ebea419530f6c0c19c1cdacfd200a640d6cff9f92af55f66e100b557de"
   },
   "flavor": "paseo",
   "installer_schema": 1,
   "installer_version": "0.2.0",
   "schema": 1,
-  "source_commit": "7afb2c2d047e20e39a37f32b4eca0522ae486d99",
+  "source_commit": "c24c2974d95091e954c534caedf23eff121f079e",
   "source_hashes": {
-    "README.md": "5ff5c16531222127545bc3de71a6cf4399c370f34dc1fa02f5c5d6a4d3b37295",
-    "claude-code-global-model-routing-prompt.md": "e5b9f6dae4b47ad499c1a33d4c5df53506785f75901d359739c4e4b11ff00c63",
-    "codex-global-model-routing-prompt.md": "6ec0effeef13967670623dc5a5bd686176ebc1dd98be9250cec364f94d03cd7c",
-    "paseo-project-setup.md": "37601c16ff6f52219768b7960cbca2a4ee9cd1424dabeb536e1f307607dd1096",
-    "project-task-policy-setup.md": "8f4bb5c98f90b5b9a45727e8c0899b5e8cf005530327b1a181f19ee524c43f0c"
+    "README.md": "1626d2cca633a52cf6b867924f793efcfd26bd79ed5d14985ca9d74b1fb9ccb1",
+    "claude-code-global-model-routing-prompt.md": "dbb3ccebc01a782c95309a2dd9c582ab01582353d047b5a0f284a73dd5036e4e",
+    "codex-global-model-routing-prompt.md": "4a39a5e6510cdedb0b522426974057bc4ef92b3a5cffb623a57bfbfb1794e4cd",
+    "paseo-project-setup.md": "2fdfd068edfe55c2d213592b7e68027fec59c03117735b0017e7a9d1f5f5e05d",
+    "project-task-policy-setup.md": "8d2de8622d802ffd3b90aba0c6965a196a743b4b86ac6a63c66c54ba119684b1"
   },
   "version": "0.1.0"
 }
