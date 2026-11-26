@@ -72,18 +72,21 @@ def render(host, cfg=None, selected=None):
     return '\n'.join(text for _, text in render_blocks(host, cfg, selected))
 
 # ---- target reading and scanning ----------------------------------------------------------------------------------------------------------
-def _read_target(path):
-    """Target bytes. Symlinks, non-regular files and oversized files are refused; the content is never echoed."""
+def _read_target(path, write=True):
+    """Target bytes. Symlinks, non-regular files and oversized files are refused (and, when the file may be replaced, hard-linked ones: the
+    replace would silently detach the other links); the content is never echoed."""
     try: st=os.lstat(path)
     except OSError: raise PolicyError('target_unavailable')
     if stat.S_ISLNK(st.st_mode): raise PolicyError('target_symlink')
     if not stat.S_ISREG(st.st_mode): raise PolicyError('target_not_regular')
     if st.st_size>MAX_BYTES: raise PolicyError('target_too_large')
+    if write and st.st_nlink>1: raise PolicyError('target_hardlinked')
     try:
         fd=os.open(path, os.O_RDONLY | os.O_NOFOLLOW | getattr(os, 'O_NONBLOCK', 0))
         with os.fdopen(fd, 'rb') as f:
             st=os.fstat(f.fileno())
             if not stat.S_ISREG(st.st_mode): raise PolicyError('target_not_regular')
+            if write and st.st_nlink>1: raise PolicyError('target_hardlinked')
             raw=f.read(MAX_BYTES+1)
     except OSError: raise PolicyError('target_unavailable')
     if len(raw)>MAX_BYTES: raise PolicyError('target_too_large')
@@ -178,6 +181,11 @@ def _line_counts(a, b):
 
 def _e(s): return s.encode('utf-8')
 
+def _region(text, s, e):
+    """A region's text, newline-terminated (the end marker may be the last line of a file that lacks a trailing newline)."""
+    r=text[s:e]
+    return r if r.endswith('\n') else r+'\n'
+
 def analyze(raw, host, cfg=None, selected=None):
     cfg=cfg or load_config()
     selected=list(selected) if selected is not None else selected_blocks(host, cfg)
@@ -187,7 +195,7 @@ def analyze(raw, host, cfg=None, selected=None):
 
 # ---- check --------------------------------------------------------------------------------------------------------------------------------
 def run_check(a):
-    raw=_read_target(a.target)
+    raw=_read_target(a.target, write=False)
     selected=selected_blocks(a.host, None, a.with_orca)
     text, regions, state, cfg=analyze(raw, a.host, None, selected)
     rendered=render_blocks(a.host, cfg, selected)
@@ -195,10 +203,10 @@ def run_check(a):
     legacy={'present':False, 'known':None}
     for name, s, e, v in regions:
         if name=='legacy':
-            h=digest(_e(text[s:e])); legacy={'present':True, 'known':h in cfg['legacy'][a.host]['known_sha256'], 'sha256':h, 'version_found':v}
+            h=digest(_e(_region(text, s, e))); legacy={'present':True, 'known':h in cfg['legacy'][a.host]['known_sha256'], 'sha256':h, 'version_found':v}
         else:
-            st=block_status(name, a.host, cfg, text[s:e], v, dict(rendered)[name])
-            blocks[name].update(present=True, version_found=v, status=st, up_to_date=st=='current')
+            st=block_status(name, a.host, cfg, _region(text, s, e), v, dict(rendered)[name])
+            blocks[name].update(present=True, version_found=v, status=st, up_to_date=text[s:e]==dict(rendered)[name])
     if state=='legacy' and not legacy['known']: state='unrecognized'
     up=state=='current' and all(b['up_to_date'] for b in blocks.values())
     return {'schema':1, 'operation':'check', 'host':a.host, 'selected_blocks':selected, 'target':os.path.abspath(a.target), 'state':state, 'up_to_date':up,
@@ -214,9 +222,9 @@ def plan_sync(raw, target, host, cfg, *, selected=None, overwrite_unrecognized=F
     legacy=None
     if state=='legacy':
         _, s, e, v = regions[0]
-        h=digest(_e(text[s:e])); known=h in cfg['legacy'][host]['known_sha256']
+        h=digest(_e(_region(text, s, e))); known=h in cfg['legacy'][host]['known_sha256']
         if not known and not overwrite_unrecognized: raise PolicyError('unrecognized_block')
-        legacy={'version_found':v, 'sha256':h, 'known':known, 'lines':text[s:e].count('\n')}
+        legacy={'version_found':v, 'sha256':h, 'known':known, 'lines':_region(text, s, e).count('\n')}
     new_text=_build(text, regions, rendered)
     new_raw=_e(new_text)
     # Outside-bytes guard: everything outside the managed regions must be byte-identical after the rewrite.
@@ -232,7 +240,7 @@ def plan_sync(raw, target, host, cfg, *, selected=None, overwrite_unrecognized=F
     for i, (name, block) in enumerate(rendered):
         if state=='legacy': action='add'; status='absent'
         else:
-            _, s, e, v = regions[i]; status=block_status(name, host, cfg, text[s:e], v, block); action='unchanged' if status=='current' else 'update'
+            _, s, e, v = regions[i]; status=block_status(name, host, cfg, _region(text, s, e), v, block); action='unchanged' if text[s:e]==block else 'update'
         statuses.append(status)
         blocks.append({'name':name, 'marker':marker_of(cfg, name, host), 'version':cfg[name]['version'], 'action':action, 'status':status, 'lines':block.count('\n')})
     if not overwrite_unrecognized:
@@ -268,23 +276,36 @@ def default_state_dir(target):
 def _state_dir(a): return Path(a.state_dir) if a.state_dir is not None else default_state_dir(a.target)
 
 def _backup(state_dir, target, raw):
-    """Private copy of the target bytes made before any write. Never printed."""
+    """Private copy of the target bytes made before any write, plus a 0600 sidecar `<backup>.target` naming the target it belongs to (restore
+    requires it to match). Never printed."""
     _private_dir(state_dir, 'state_dir_unsafe', create=True)
     b=Path(state_dir)/'backups'
     if not _private_dir(b, 'backups_dir_unsafe'): os.mkdir(b, 0o700); os.chmod(b, 0o700)
     path=b/('%s.%s.%s'%(Path(target).name, datetime.now(timezone.utc).strftime('%Y%m%dT%H%M%SZ'), digest(raw)[:8]))
+    owner=os.path.abspath(target).encode('utf-8'); side=Path(str(path)+'.target')
     try: fd=os.open(path, os.O_WRONLY | os.O_CREAT | os.O_EXCL | os.O_NOFOLLOW, 0o600)
     except FileExistsError:
-        if _read_nofollow(path, 'backup_exists')==raw: return path
-        raise PolicyError('backup_exists')
+        # same name means same second and same content: reusable only for the very same target
+        if _read_nofollow(path, 'backup_exists')!=raw: raise PolicyError('backup_exists')
+        try: owned=_read_nofollow(side, 'backup_exists')
+        except PolicyError: owned=None
+        if owned is not None and owned!=owner: raise PolicyError('backup_exists')
+        if owned is None: _write_private(side, owner, b)
+        return path
     try:
         with os.fdopen(fd, 'wb') as f: f.write(raw); f.flush(); os.fchmod(f.fileno(), 0o600); os.fsync(f.fileno())
-        _sync_dir(b)
+        _write_private(side, owner, b)
     except BaseException:
-        try: os.unlink(path)
-        except OSError: pass
+        for x in (path, side):
+            try: os.unlink(x)
+            except OSError: pass
         raise
     return path
+
+def _write_private(path, data, parent):
+    fd=os.open(path, os.O_WRONLY | os.O_CREAT | os.O_EXCL | os.O_NOFOLLOW, 0o600)
+    with os.fdopen(fd, 'wb') as f: f.write(data); f.flush(); os.fchmod(f.fileno(), 0o600); os.fsync(f.fileno())
+    _sync_dir(parent)
 
 def _before_replace(path):
     """Test seam: runs after the temp file is complete and before the final sha re-check."""
@@ -362,6 +383,9 @@ def _resolve_backup(state_dir, arg, target):
     if not stat.S_ISREG(st.st_mode): raise PolicyError('backup_not_regular')
     braw=_read_nofollow(path, 'backup_unavailable')
     if digest(braw)[:8]!=m.group(2): raise PolicyError('backup_corrupt')
+    try: owner=_read_nofollow(Path(str(path)+'.target'), 'backup_target_missing')
+    except PolicyError: raise PolicyError('backup_target_missing')
+    if owner!=os.path.abspath(target).encode('utf-8'): raise PolicyError('backup_target_mismatch')   # a backup of another file never restores here
     return path, braw
 
 def run_restore(a):

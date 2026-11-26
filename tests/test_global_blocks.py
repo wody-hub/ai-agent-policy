@@ -589,3 +589,64 @@ def test_apply_then_restore_roundtrip_for_both_hosts(tmp_path):
     for host in HOSTS:
         d=tmp_path/host; d.mkdir(); t, orig, backup, sd=synced(d, host)
         code, plan=restore(t, backup, sd); restore(t, backup, sd, '--plan-sha256', plan['plan_sha256']); assert t.read_bytes()==orig
+
+# ---- hardening: hard links, backup ownership sidecar, end of file ---------------------------------------------------------------------------
+def test_hard_linked_target_is_refused_for_writes_but_checkable(tmp_path):
+    t=target(tmp_path); twin=tmp_path/'twin.md'; os.link(t, twin); before=t.read_bytes()
+    assert sync('claude', t, '--state-dir', tmp_path/'st')[1]['error']=='target_hardlinked'
+    code, r=sync('claude', t, '--state-dir', tmp_path/'st', '--plan-sha256', '4'*64); assert code==2 and r['error']=='target_hardlinked'
+    assert cli('check', '--host', 'claude', '--target', t)[1]['state']=='legacy'   # read-only check is fine
+    assert t.read_bytes()==before and twin.read_bytes()==before and not (tmp_path/'st').exists()
+    twin.unlink(); assert sync('claude', t)[0]==0   # back to a single link
+
+def test_hard_linked_restore_target_is_refused(tmp_path):
+    t, orig, backup, sd=synced(tmp_path); os.link(t, tmp_path/'twin.md'); new=t.read_bytes()
+    assert restore(t, backup, sd)[1]['error']=='target_hardlinked' and t.read_bytes()==new
+
+def test_backup_gets_a_private_sidecar_with_the_target_path(tmp_path):
+    t, orig, backup, sd=synced(tmp_path); side=Path(str(backup)+'.target')
+    assert side.read_bytes()==os.path.abspath(t).encode() and stat.S_IMODE(os.stat(side).st_mode)==0o600
+    assert gb.BACKUP_NAME.fullmatch(side.name) is None   # never mistaken for a backup itself
+
+def test_restore_requires_a_matching_sidecar(tmp_path):
+    t, orig, backup, sd=synced(tmp_path); new=t.read_bytes(); side=Path(str(backup)+'.target')
+    side.write_bytes(b'/somewhere/else.md'); assert restore(t, backup, sd)[1]['error']=='backup_target_mismatch'
+    side.unlink(); assert restore(t, backup, sd)[1]['error']=='backup_target_missing'
+    side.symlink_to(t); assert restore(t, backup, sd)[1]['error']=='backup_target_missing'; side.unlink()
+    assert t.read_bytes()==new
+    side.write_bytes(os.path.abspath(t).encode()); code, plan=restore(t, backup, sd); assert code==0 and plan['changes']==1
+
+def test_shared_state_dir_with_same_basename_cannot_restore_the_wrong_target(tmp_path):
+    d1=tmp_path/'one'; d2=tmp_path/'two'; d1.mkdir(); d2.mkdir(); sd=tmp_path/'shared'
+    t1=target(d1, 'claude', pre='# one\n'); t2=target(d2, 'claude', pre='# two — 다른 파일\n'); o1=t1.read_bytes(); o2=t2.read_bytes()
+    r1=apply('claude', t1, sd)[1]; r2=apply('claude', t2, sd)[1]
+    n2=t2.read_bytes()
+    code, r=restore(t2, Path(r1['backup']), sd); assert code==2 and r['error']=='backup_target_mismatch' and t2.read_bytes()==n2
+    for t, res, o in ((t1, r1, o1), (t2, r2, o2)):
+        code, plan=restore(t, Path(res['backup']), sd); code, r=restore(t, Path(res['backup']), sd, '--plan-sha256', plan['plan_sha256']); assert code==0 and t.read_bytes()==o
+
+def test_identical_targets_in_one_state_dir_do_not_share_a_backup(tmp_path, monkeypatch):
+    import datetime as dt
+    class Fixed(dt.datetime):
+        @classmethod
+        def now(cls, tz=None): return cls(2026, 11, 26, 12, 0, 0, tzinfo=tz)
+    monkeypatch.setattr(gb, 'datetime', Fixed)
+    d1=tmp_path/'one'; d2=tmp_path/'two'; d1.mkdir(); d2.mkdir(); sd=tmp_path/'shared'
+    t1=target(d1); t2=target(d2); b2=t2.read_bytes()
+    assert apply('claude', t1, sd)[0]==0
+    code, plan=sync('claude', t2, '--state-dir', sd); code, r=sync('claude', t2, '--state-dir', sd, '--plan-sha256', plan['plan_sha256'])
+    assert code==2 and r['error']=='backup_exists' and t2.read_bytes()==b2
+
+@pytest.mark.parametrize('host', HOSTS)
+def test_legacy_end_marker_as_last_line_without_newline(tmp_path, host):
+    t=tmp_path/'e.md'; t.write_text(PRE+legacy(host).rstrip('\n'), encoding='utf-8'); assert not t.read_bytes().endswith(b'\n')
+    code, plan=sync(host, t); assert code==0 and plan['state']=='legacy' and plan['legacy']['known'] is True
+    code, res=apply(host, t, tmp_path/'st'); assert code==0
+    assert t.read_bytes()==(PRE+R(host)).encode('utf-8') and cli('check', '--host', host, '--target', t)[0]==0
+    assert Path(res['backup']).read_bytes()==(PRE+legacy(host).rstrip('\n')).encode('utf-8')
+
+def test_current_blocks_at_end_of_file_without_newline_get_it_added(tmp_path):
+    t=tmp_path/'e.md'; t.write_text(PRE+R('claude').rstrip('\n'), encoding='utf-8')
+    code, plan=sync('claude', t); assert code==0 and [b['status'] for b in plan['blocks']]==['current', 'current'] and [b['action'] for b in plan['blocks']]==['unchanged', 'update']
+    assert cli('check', '--host', 'claude', '--target', t)[0]==1
+    apply('claude', t, tmp_path/'st'); assert t.read_bytes()==(PRE+R('claude')).encode('utf-8')
