@@ -33,7 +33,7 @@ An escalation handoff carries only goal, related files, current implementation s
 
 ## Project policies
 
-Follow project Task IDs, branch mappings, documentation, and completion gates when applicable.
+Preserve user-owned work. Follow project Task IDs, branch mappings, documentation, and completion gates when applicable.
 
 ## Orchestration environments
 

@@ -32,7 +32,7 @@ Pass only files, docs, and settings directly relevant to the task; reuse analysi
 
 ## Project policies
 
-Follow project Task IDs, branch mappings, documentation, and completion gates when applicable.
+Preserve user-owned work. Follow project Task IDs, branch mappings, documentation, and completion gates when applicable.
 
 ## Orchestration environments
 

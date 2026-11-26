@@ -120,15 +120,25 @@ def test_known_legacy_hash_pins_the_fixture(host):
     assert lines[0].startswith('<!-- ai-agent-policy:%s:start version=1.4.0 -->'%host) and lines[-2]=='<!-- ai-agent-policy:%s:end -->'%host and lines[-1]==''
     assert b'\r' not in raw
 
+def _sentences(par): return [x.strip() for x in re.split(r'(?<=\.)\s+', par.strip())]
+
 @pytest.mark.parametrize('host', HOSTS)
-def test_core_is_legacy_minus_paseo_paragraph(host):
+def test_every_legacy_sentence_is_accounted_for_in_core_or_paseo(host):
     old=legacy(host).split('\n')[1:-2]
-    new=(GLOBAL/('core.%s.md'%host)).read_text(encoding='utf-8').rstrip('\n').split('\n')
-    removed=[l for l in old if l not in new]; added=[l for l in new if l not in old]
-    assert sum(l.startswith('For confirmed Paseo-managed work') for l in removed)==1
-    assert '## Paseo and project policies' in removed and all(('1.4.0' in l or 'Updated: 2026-11-12' in l or 'Paseo' in l) for l in removed)
-    assert set(added)=={l for l in added if '1.5.0' in l or 'Updated: 2026-11-26' in l}|{'## Project policies', '## Orchestration environments',
-        'Follow project Task IDs, branch mappings, documentation, and completion gates when applicable.', next(l for l in new if l.startswith('Orca-managed and Paseo-managed'))}
+    core_text=(GLOBAL/('core.%s.md'%host)).read_text(encoding='utf-8'); core=core_text.rstrip('\n').split('\n')
+    paseo=(GLOBAL/'paseo.md').read_text(encoding='utf-8')
+    par=next(l for l in old if l.startswith('For confirmed Paseo-managed work'))
+    # only the title, the date line, the Paseo heading and the Paseo paragraph may differ; everything else is verbatim
+    assert set(old)-set(core)=={old[0], '## Paseo and project policies', par}|{l for l in old if l.startswith('Updated: ')}
+    added=[l for l in core if l not in old and not l.startswith('Updated: ') and '1.5.0' not in l]
+    assert added==[
+        '## Project policies', 'Preserve user-owned work. Follow project Task IDs, branch mappings, documentation, and completion gates when applicable.',
+        '## Orchestration environments', next(l for l in core if l.startswith('Orca-managed'))]
+    s=_sentences(par); assert len(s)==4
+    assert s[0]=='For confirmed Paseo-managed work, use the installed Paseo skill and applicable project instructions.' and '설치된 Paseo 스킬과 해당 프로젝트 지침' in paseo
+    assert s[1]=='Paseo manages agents and workspaces; verify results and preserve user-owned work.' and 'Preserve user-owned work.' in core_text
+    assert s[2]=='Follow project Task IDs, branch mappings, documentation, and completion gates when applicable.' and s[2] in core_text
+    assert s[3]=='Do not infer a Paseo-managed task merely from the presence of the CLI.' and 'not evidence' in core_text
 
 # ---- legacy -> three blocks ----------------------------------------------------------------------------------------------------------------
 @pytest.mark.parametrize('host', HOSTS)
