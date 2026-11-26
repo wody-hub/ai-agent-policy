@@ -115,8 +115,9 @@ def check_profiles(config, profiles, *, model_catalog=None, paseo_models=None):
 
 FIELDS=('provider','model','modeId','thinkingOptionId')
 BACKUP_NAME=re.compile(r'config\.\d{8}T\d{6}Z\.([0-9a-f]{8})\.json')
-RELOAD_NOTE=('The running Paseo daemon does not hot-reload config.json: restart the Paseo daemon (or app) for this change to take effect. '
-             'Saving profiles from the Paseo app UI before that restart could overwrite this change.')
+RELOAD_NOTE=('The running Paseo daemon does not watch config.json: run `paseo daemon reload` (a restart is not needed for daemon.agentProfiles) '
+             'for this change to take effect, and check the output: if reload reports an invalid config the daemon keeps the old profiles, '
+             'so roll the file back with `sync --restore <backup>`. Saving profiles from the Paseo app UI before the reload could overwrite this change.')
 MAX_BYTES=8*1024*1024
 
 # ---- file helpers -------------------------------------------------------------------------------------------------------------------------
@@ -274,7 +275,7 @@ def plan_sync(raw, config_path, config, *, model_catalog, state, include_provisi
             if want['provisional'] and not include_provisional: row['action']='skip_provisional'
             else:
                 row['action']='create'; row['fields']=[{'field':f,'current':None,'desired':v} for f, v in desired.items()]
-                new={'id':pid,'name':pid}; new.update(desired); new.update(options=None)
+                new={'id':pid,'name':pid}; new.update(desired)   # no `options` key: Paseo rejects `options: null` (expected record); existing profiles omit it
                 if want['notes'] is not None: new['notes']=want['notes']
                 row['new_profile']=new
         else:

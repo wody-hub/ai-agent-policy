@@ -150,9 +150,12 @@ class SyncPlanTests(unittest.TestCase):
         e=Env(self, live_like(lambda ps: ps.pop(-2)), catalog=FRESH_CATALOG())
         code, out=e.dry(); row=out['profiles']['lookup']
         self.assertEqual((code, row['action']), (0, 'create'))
-        self.assertEqual((row['new_profile']['options'], row['new_profile']['model'], row['new_profile']['notes']), (None, 'gpt-6-luna', BASE['paseo_profiles']['lookup']['description']))
+        self.assertEqual((row['new_profile']['model'], row['new_profile']['notes']), ('gpt-6-luna', BASE['paseo_profiles']['lookup']['description']))
+        self.assertNotIn('options', row['new_profile'])   # Paseo rejects `options: null` ("expected record"), existing profiles omit the key
         code, out=e.apply(); self.assertEqual(code, 0)   # on-disk key order of the appended profile
-        self.assertEqual(list(profile(e.loaded(), 'lookup')), ['id','name','provider','model','modeId','thinkingOptionId','options','notes'])
+        created=profile(e.loaded(), 'lookup')
+        self.assertEqual(list(created), ['id','name','provider','model','modeId','thinkingOptionId','notes'])
+        self.assertNotIn(None, created.values())          # a created profile never carries a null value
         code, out=e.dry('--overwrite','nope'); self.assertEqual((code, out['error']), (2, 'overwrite_unknown_id'))
         code, out=e.dry('--overwrite','lookup,custom-x'); self.assertEqual((code, out['error']), (2, 'overwrite_unknown_id'))
 
@@ -168,10 +171,10 @@ class SyncApplyTests(unittest.TestCase):
         e=self.e; code, out=e.apply()
         self.assertEqual((code, out['applied'], out['changes']), (0, True, 2))
         self.assertIs(out['daemon_reload_required'], True)
-        self.assertIn('restart', out['note'].lower()); self.assertIn('overwrite', out['note'].lower())
+        self.assertIn('paseo daemon reload', out['note']); self.assertIn('--restore', out['note']); self.assertIn('overwrite', out['note'].lower())
         new=e.loaded(); exp=json.loads(self.orig)
         profile(exp, 'l4-critical')['modeId']='auto'
-        exp['daemon']['agentProfiles'].append({'id':'lookup','name':'lookup','provider':'codex','model':'gpt-6-luna','modeId':'auto','thinkingOptionId':'medium','options':None,'notes':BASE['paseo_profiles']['lookup']['description']})
+        exp['daemon']['agentProfiles'].append({'id':'lookup','name':'lookup','provider':'codex','model':'gpt-6-luna','modeId':'auto','thinkingOptionId':'medium','notes':BASE['paseo_profiles']['lookup']['description']})
         self.assertEqual(new, exp)
         self.assertEqual(e.cfg.read_text(), dump(exp))             # byte-level: order, indent, unicode preserved
         self.assertEqual(list(new), list(self.origcfg)); self.assertEqual(list(new['daemon']), list(self.origcfg['daemon']))

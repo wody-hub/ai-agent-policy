@@ -121,9 +121,9 @@
     "review-codex-work": {"task_types": ["code_review_codex"], "expect": ["sonnet", "medium"], "description": "Independent read-only review of Codex-implemented work. Important reviews: thinking high."},
     "review-claude-work": {"task_types": ["code_review_claude"], "expect": ["terra", "high"], "description": "Independent review of Claude-implemented work. Instruct read-only. Alternate: gpt-6-luna high. Codex has no Paseo tools in Paseo; it reports by its final message."},
     "lookup": {"role": "lookup", "description": "Bounded lookup, extraction, log summary (log_summary: thinking low). No design or security."},
-    "scout": {"expect": ["haiku", null], "mode_id": "plan", "provisional": true, "description": "Provisional, no profile yet: read-only file/symbol scouting on Haiku (plan mode). Effort not set."},
-    "ui-verify": {"expect": ["terra", "high"], "provisional": true, "description": "Provisional, no profile yet, unmeasured: UI verification on Terra high."},
-    "l5-alt-astra": {"level": 5, "expect": ["astra", "high"], "provisional": true, "description": "Provisional, no profile yet: LEVEL 5 alternate (Astra) used when the failed LEVEL 4 family was Claude. Same last-resort rules as l5-last-resort."}
+    "scout": {"expect": ["haiku", null], "mode_id": "plan", "provisional": true, "description": "Provisional, unmeasured: read-only file/symbol scouting on Haiku (plan mode). Effort not set."},
+    "ui-verify": {"expect": ["terra", "high"], "provisional": true, "description": "Provisional, unmeasured: UI verification on Terra high."},
+    "l5-alt-astra": {"level": 5, "expect": ["astra", "high"], "provisional": true, "description": "Provisional, unmeasured: LEVEL 5 alternate (Astra) used when the failed LEVEL 4 family was Claude. Same last-resort rules as l5-last-resort."}
   },
   "review_mode": {
     "task_types": ["review", "code_review_codex", "code_review_claude", "important_review", "important_review_codex", "security_review"],
