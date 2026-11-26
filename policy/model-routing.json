@@ -1,12 +1,13 @@
 {
   "schema": 1,
-  "version": "1.7.0",
+  "version": "1.7.1",
   "verified_on": "2026-11-25",
   "verification_scope": {
     "verified": "The four Codex exact ids (gpt-6.2-sol, gpt-6.2-astra, gpt-6.1-terra, gpt-6-luna) ran via Paseo codex on the ChatGPT account, and the Claude aliases opus/haiku/fable resolved to claude-opus-5-5/claude-haiku-5-5/claude-fable-5-2 (2026-11-25).",
     "not_verified": "Exact-id runs of claude-haiku-5-5, claude-sonnet-5-5 and claude-fable-5-1, and effort support on haiku 5-5."
   },
   "changelog": [
+    {"version": "1.7.1", "date": "2026-11-26", "change": "Rename shared task route table without changing choices; validate every host route table and preserve legacy config support."},
     {"version": "1.7.0", "date": "2026-11-25", "change": "Merges docs/paseo-policy-source 1.6.0 (P1-P4) with main 58037de (unlabelled 1.6.0). Applies P5: sol gpt-6.2-sol, astra gpt-6.2-astra (ran via Paseo codex, ChatGPT account, 2026-11-25); haiku claude-haiku-5-5 (Paseo alias resolution). Adds LEVEL 2 Terra lateral (also changes Orca/codex output), failed_family/failed_models/implementer_family, cross_family_review, premium_requires_reason, paseo_profiles gains managed metadata (replaces paseo_roles). Fable 5-2 observed, not adopted. Haiku efforts changed from [] to low..max (so expect [haiku, high] now validates although effort support is not verified); hosts.paseo.default_mode_id added. P6 not applied."},
     {"version": "1.6.0", "date": "2026-11-25", "change": "Add host paseo (P1), Paseo-host Sonnet high orchestrator/coordinator roles with no fallback and an orchestrator_tools restriction (P2), paseo_profiles name map (P3) and review_mode (P4). Orca, claude and codex host values, orca_task_routes and limits are unchanged. P5 (Codex fallback IDs) and P6 (profile plan_mode in the user Paseo config) are not applied; verified_on is not refreshed because model access was not re-verified."},
     {"version": "1.5.0", "date": "2026-11-12", "change": "Baseline before Paseo support."}
@@ -30,10 +31,10 @@
     "terra": "gpt-6.1-terra"
   },
   "hosts": {
-    "orca":   {"tools": ["claude", "codex"], "description": "Confirmed Orca task: Controller may assign either tool per worker."},
+    "orca":   {"tools": ["claude", "codex"], "task_routes_key": "task_routes", "description": "Confirmed Orca task: Controller may assign either tool per worker."},
     "claude": {"tools": ["claude"], "description": "Claude Code session outside Orca."},
     "codex":  {"tools": ["codex"], "description": "Codex session outside Orca."},
-    "paseo":  {"tools": ["claude", "codex"], "orchestrator_tools": ["claude"], "alternatives_key": "paseo_alternatives", "task_routes_key": "orca_task_routes", "default_mode_id": "auto",
+    "paseo":  {"tools": ["claude", "codex"], "orchestrator_tools": ["claude"], "alternatives_key": "paseo_alternatives", "task_routes_key": "task_routes", "default_mode_id": "auto",
                "description": "Confirmed Paseo task: orchestrators need Paseo tools (Claude only); workers may be Claude or Codex. Output is a create_agent starting configuration; the Owner computes attempts, escalation and concurrency."}
   },
   "roles": {
@@ -76,7 +77,7 @@
     "log_summary": 1,
     "architecture_major": 4, "concurrency": 4, "codebase_wide": 4, "security": 4, "data_integrity": 4
   },
-  "orca_task_routes": {
+  "task_routes": {
     "requirements": [["sonnet", "high"], ["terra", "high"]],
     "decomposition": [["terra", "high"], ["sonnet", "high"]],
     "architecture": [["terra", "high"], ["luna", "high"]],

@@ -1,10 +1,10 @@
-# Shared Paseo orchestration policy · 0.1.1-draft
+# Paseo orchestration policy · 0.2.0
 
-상태: 초안(2026-11-25, paseo-policy-migration 1단계, 같은 날 사용자 확정 결정 반영; 2B에서 Hermes 미사용·relay 유지·Q6~Q10 결정 반영, 0.1.1-draft). 전역 지침의 Paseo 블록은 2026-11-26 승인·적용되었다. 이 문서 전체의 설치·배포 승인을 뜻하지 않으며 프로젝트별 맥락 전달과 훅 없는 준비 절차는 2026-11-26 승인되었다. 기존 `policy/orca-common.md`(0.2.2)를 즉시 대체하지 않는다. 퇴역은 병행기 후로 확정되었다(아래 §1). 상세 절차는 [Paseo agent lifecycle](../docs/paseo-agent-lifecycle.md), [Paseo model routing](../docs/paseo-model-routing.md), 설계 근거와 판정표는 [migration design](../docs/paseo-migration-design.md)에 둔다.
+상태: 승인(2026-11-26). 전역 Paseo 정책과 프로젝트별 맥락 전달, 훅 없는 준비 절차를 적용한다. 미검증 기술 사실과 임시 모델 프로필은 각각 미확인·임시로 유지한다. 기존 Orca 업무는 병행기 종료까지 해당 정책을 따른다. 상세는 [생명주기](../docs/paseo-agent-lifecycle.md), [모델 라우팅](../docs/paseo-model-routing.md), [이전 설계 기록](../docs/paseo-migration-design.md)을 참조한다.
 
 ## 1. 적용 조건
 
-- 이 본문은 설치된 프로젝트 Paseo 정책과 실제 작업 맥락이 함께 Paseo 관리 작업임을 확인할 때만 적용한다. 작업 맥락의 증거는 부모 에이전트의 배정 메시지(Task ID·워크스페이스·역할·완료 조건 포함)와 에이전트 자신의 런타임 기록(부모 라벨 `paseo.parent-agent-id`, 워크스페이스 ID)이다.
+- 이 본문은 실제 Paseo 관리 업무에 적용하며 프로젝트별 설치를 필수로 요구하지 않는다. Root는 사용자의 명시적 Paseo 업무 요청과 실제 세션을 확인한다. Worker는 부모의 배정 메시지(Task ID·워크스페이스·역할·완료 조건)와 부모 라벨 `paseo.parent-agent-id`를 확인한다. 프로젝트 고유 지침이 있으면 적용 가능성과 접근을 확인한다.
 - `PASEO_AGENT_ID` 같은 환경 변수, Paseo 데몬·CLI 설치, Paseo MCP 도구가 보인다는 사실 하나만으로 Paseo 관리 작업이라고 판정하지 않는다. 증거가 없거나 모호하면 이 본문을 자동 적용하지 않고, 소스 수정 전에 실행 방식을 확인한다.
 - 사용자가 명시적으로 요청한 설명·가이드는 실행 권한을 주지 않는다.
 - Paseo 밖의 일반 Claude/Codex 세션은 기존 전역 정책(cost-first 라우팅)을 그대로 따른다.

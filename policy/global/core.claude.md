@@ -1,4 +1,4 @@
-# Claude Code model routing policy (cost-first, 1.5.0, 2026-11-26)
+# Claude Code model routing policy (cost-first, 1.5.1, 2026-11-26)
 
 This is the user's global model operating policy. Follow system, developer, organization, and applicable project instructions first. A role name or configured model is not proof of the model that actually ran; report the model and effort only from runtime evidence. The canonical routing values live in `~/Project/ETC/ai-agent-policy/policy/model-routing.json`; `python3 -B -m ai_policy.routing` (run from that repo) returns the route for a task.
 
@@ -36,7 +36,7 @@ Preserve user-owned work. Follow project Task IDs, branch mappings, documentatio
 
 ## Orchestration environments
 
-Orca-managed Runs still owned by the existing Orca follow the project's installed Orca policy and `~/Project/ETC/ai-agent-policy/docs/orca-worker-lifecycle.md`; Paseo-managed work follows the Paseo policy block (`ai-agent-policy:paseo-policy`). Each applies only when its own installed project policy and the actual task context both confirm that environment; a CLI, an environment variable or an MCP tool being present is not evidence. Outside both, this core policy applies unchanged.
+Orca-managed Runs still owned by the existing Orca follow the project's installed Orca policy and `~/Project/ETC/ai-agent-policy/docs/orca-worker-lifecycle.md`; Paseo-managed work follows the Paseo policy block (`ai-agent-policy:paseo-policy`). Orca requires its installed project policy and confirmed task context. Paseo requires confirmed task context; project-specific policy is optional. A CLI, an environment variable or an MCP tool being present is not evidence. Outside both, this core policy applies unchanged.
 
 ## Safety and project workflow
 

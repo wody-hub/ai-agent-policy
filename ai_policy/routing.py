@@ -73,13 +73,17 @@ def load_config(path=None):
             if c['models'][e2[0]]['tier'] in c['limits'].get('premium_tiers', ()) or c['models'][e2[0]]['tool'] not in hosts[h]['tools']: _bad()
     _validate_paseo(c)
     _validate_cross_family_review(c)
-    task_routes = c.get('orca_task_routes', {})
-    if not isinstance(task_routes, dict): _bad()
-    for key, entries in task_routes.items():
-        if key not in c['task_types'] or not isinstance(entries, list) or not entries: _bad()
-        for entry in entries:
-            _pick(c, entry)
-            if c['models'][entry[0]]['tier'] in c['limits'].get('premium_tiers', ()): _bad()
+    route_keys = {'orca_task_routes'} | {h['task_routes_key'] for h in hosts.values() if h.get('task_routes_key') is not None}
+    if any(not isinstance(k, str) or not k for k in route_keys): _bad()
+    for route_key in route_keys:
+        task_routes = c.get(route_key, {})
+        if not isinstance(task_routes, dict): _bad()
+        if any(h.get('task_routes_key') == route_key for h in hosts.values()) and route_key not in c: _bad()
+        for key, entries in task_routes.items():
+            if key not in c['task_types'] or not isinstance(entries, list) or not entries: _bad()
+            for entry in entries:
+                _pick(c, entry)
+                if c['models'][entry[0]]['tier'] in c['limits'].get('premium_tiers', ()): _bad()
     if not set(c['levels'])<={'1','2','3','4','5'} or '4' not in c['levels']: _bad()
     if any(t not in (1,2,3,4) for t in c['task_types'].values()): _bad()
     for a, fb in c['fallbacks'].items():

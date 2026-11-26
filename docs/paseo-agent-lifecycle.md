@@ -1,6 +1,6 @@
-# Paseo agent lifecycle (draft 0.1.0)
+# Paseo agent lifecycle (0.2.0)
 
-상태: 운영 지침 초안. 전역 블록은 2026-11-26 승인·적용됐으며 이 문서 전체의 승인을 뜻하지 않는다. 4.2절의 훅 없는 준비 절차는 2026-11-26 승인되었다. [Orca Worker lifecycle rulebook](orca-worker-lifecycle.md)에 대응하는 Paseo용 규칙이다. 승인 전에는 Orca 문서를 대체하지 않는다. 퇴역은 병행기 후다: 기존 Orca가 소유한 진행 중 Run·worktree만 Orca 규칙으로 마무리하고 새 Task는 즉시 이 문서를 따르며, 모든 Orca Run 정산·release 확인 뒤 Orca 문서를 «보관» 표시한다([migration design](paseo-migration-design.md) 5절 Q1). 공통 원칙은 [paseo-common](../policy/paseo-common.md)을 따른다.
+상태: 승인(2026-11-26). 적용 범위는 [Paseo 정책](../policy/paseo-common.md)을 따른다. 미확인 사실은 승인으로 검증된 것으로 바뀌지 않는다. 기존 Orca 업무는 병행기 종료까지 [Orca 지침](orca-worker-lifecycle.md)을 따른다.
 
 근거 표기: [DOC]/[SRC]/[GH]는 `.local-artifacts/paseo-migration/evidence/paseo-technical-research.md`(Paseo v0.17.4, 소스 commit 8b2e14f, 2026-11-24)의 표기를 따른다. [MCP]는 2026-11-25 이 세션에서 읽은 Paseo MCP 도구 스키마다. [미확인]은 실행으로 검증하지 않은 항목이다. [관측]은 2026-11-25 이 세션의 설정 파일 읽기·`inspect_provider`·Worker 실행에서 직접 확인한 사실이다.
 

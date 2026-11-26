@@ -6,9 +6,9 @@ Claude Code `~/.claude/CLAUDE.md`와 Codex `~/.codex/AGENTS.md`의 전역 지침
 
 | 블록 | 마커 | 버전 | 성격 | 기본 설치 |
 | --- | --- | --- | --- | --- |
-| core | `ai-agent-policy:core-claude` / `ai-agent-policy:core-codex` | 1.5.0 | 호스트 중립 모델 라우팅(호스트별 `core.claude.md`, `core.codex.md`) | 예 |
+| core | `ai-agent-policy:core-claude` / `ai-agent-policy:core-codex` | 1.5.1 | 호스트 중립 모델 라우팅(호스트별 `core.claude.md`, `core.codex.md`) | 예 |
 | orca | `ai-agent-policy:orca-policy` | 1.4.0 (동결) | Orca 방식, 병행기·보관 (두 호스트 공통 `orca.md`) | 아니오 (`--with-orca`) |
-| paseo | `ai-agent-policy:paseo-policy` | 0.1.1-draft | Paseo 방식, 짧은 게이트·역할·Human Gate (두 호스트 공통 `paseo.md`) | 예 |
+| paseo | `ai-agent-policy:paseo-policy` | 0.2.0 | Paseo 방식, 짧은 게이트·역할·Human Gate (두 호스트 공통 `paseo.md`) | 예 |
 
 **기본 설치는 core + paseo**다(`blocks.json`의 `hosts.<host>.default_blocks`). 항상 로드되는 텍스트(토큰 비용)를 줄이기 위해 Orca 블록은 저장소 원본으로만 두고 기본으로 반영하지 않는다. 진행 중인 Orca Run은 프로젝트 수준 Orca 정책과 `docs/orca-worker-lifecycle.md`를 따른다. 필요하면 `--with-orca`로 core, orca, paseo 세 블록을 모두 관리한다.
 
@@ -22,8 +22,8 @@ Claude Code `~/.claude/CLAUDE.md`와 Codex `~/.codex/AGENTS.md`의 전역 지침
 
 | 호스트 | core | paseo | orca | legacy | 기본(core+paseo) | 기본 증감 | `--with-orca` | `--with-orca` 증감 |
 | --- | --- | --- | --- | --- | --- | --- | --- | --- |
-| claude | 7508 | 1396 | 3115 | 7217 | 8905 | +1688 | 12021 | +4804 |
-| codex | 7628 | 1396 | 3115 | 7337 | 9025 | +1688 | 12141 | +4804 |
+| claude | 7540 | 1259 | 3115 | 7217 | 8800 | +1583 | 11916 | +4699 |
+| codex | 7660 | 1259 | 3115 | 7337 | 8920 | +1583 | 12036 | +4699 |
 
 `tests/test_global_blocks.py`가 기본 묶음의 증감이 2000바이트를 넘지 않는지 검사한다.
 
@@ -63,6 +63,10 @@ python3 -B -m ai_policy.globalblocks restore --target ~/.claude/CLAUDE.md --back
 블록 묶음을 바꾸는 일은 지원하지 않는다: `--with-orca`로 설치한 파일에 기본 묶음으로 sync하면 `unexpected_block`, 기본으로 설치한 파일에 `--with-orca`로 sync하면 `partial_install`로 거부한다. restore로 이전 백업으로 돌아간 뒤 원하는 묶음으로 다시 sync한다.
 
 legacy 블록의 sha256이 `blocks.json`의 `known_sha256`에 없으면(손으로 고쳤으면) `unrecognized_block`으로 거부하며, 내용을 확인한 뒤에만 `--overwrite-unrecognized`로 덮어쓴다. 알려진 legacy 해시: claude `00b5a84d…`, codex `af42a251…`(각 1.4.0 블록, 시작 마커 줄부터 끝 마커 줄까지). 끝 마커가 파일의 마지막 줄이고 줄바꿈이 없으면 줄바꿈을 붙여 해시를 계산하며, 적용하면 파일 끝에 줄바꿈이 생긴다.
+
+## 2026-11-26 적용 범위 보정
+
+코어 1.5.1과 Paseo 0.2.0은 전역 정책을 프로젝트별로 재설치해야 한다는 기존 조건을 제거한다. Root는 사용자의 명시적 Paseo 업무 요청과 세션을, Worker는 부모 배정과 라벨을 근거로 확인한다. 프로젝트별 지침은 필요한 경우 별도로 전달하며, 기존 Orca 설치 조건은 유지한다. 기존 1.5.0/0.1.1-draft 블록의 해시는 갱신을 위해 계속 보존한다.
 
 ## 마이그레이션
 

@@ -1,4 +1,4 @@
-# Codex Global Model Routing and Hybrid Orchestration Policy (cost-first, 1.5.0)
+# Codex Global Model Routing and Hybrid Orchestration Policy (cost-first, 1.5.1)
 
 Updated: 2026-11-26. Apply at every session start and throughout the task. This user-level policy is in the effective `CODEX_HOME` (normally `~/.codex`) and can be superseded by a non-empty global `AGENTS.override.md`. Preserve higher-priority system/developer instructions, project guidance, security requirements, and explicit user instructions. A policy describes routing; it does not change the active model. Claim a model switch only when the runtime or spawn explicitly selected it. Canonical routing values: `~/Project/ETC/ai-agent-policy/policy/model-routing.json`; run `python3 -B -m ai_policy.routing --host codex ...` from that repo to resolve the current route.
 
@@ -37,7 +37,7 @@ Preserve user-owned work. Follow project Task IDs, branch mappings, documentatio
 
 ## Orchestration environments
 
-Orca-managed Runs still owned by the existing Orca follow the project's installed Orca policy and `~/Project/ETC/ai-agent-policy/docs/orca-worker-lifecycle.md`; Paseo-managed work follows the Paseo policy block (`ai-agent-policy:paseo-policy`). Each applies only when its own installed project policy and the actual task context both confirm that environment; a CLI, an environment variable or an MCP tool being present is not evidence. Outside both, this core policy applies unchanged.
+Orca-managed Runs still owned by the existing Orca follow the project's installed Orca policy and `~/Project/ETC/ai-agent-policy/docs/orca-worker-lifecycle.md`; Paseo-managed work follows the Paseo policy block (`ai-agent-policy:paseo-policy`). Orca requires its installed project policy and confirmed task context. Paseo requires confirmed task context; project-specific policy is optional. A CLI, an environment variable or an MCP tool being present is not evidence. Outside both, this core policy applies unchanged.
 
 ## Claude Code and independent review
 

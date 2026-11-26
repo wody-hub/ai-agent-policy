@@ -14,7 +14,7 @@
     }
   },
   "core": {
-    "version": "1.5.0",
+    "version": "1.5.1",
     "sources": {
       "claude": "core.claude.md",
       "codex": "core.codex.md"
@@ -25,10 +25,12 @@
     },
     "known_sha256": {
       "claude": [
-        "1156aee8f496df503b51d0b47c47933271b5f5901a5ca2ce80379be26b8b1e0c"
+        "1156aee8f496df503b51d0b47c47933271b5f5901a5ca2ce80379be26b8b1e0c",
+        "4a8186da1560532cb0d1a55b8e715a426124710012af0ad088f407965b96b1f5"
       ],
       "codex": [
-        "a86f87708acd4d77a8d26317e7594d5cdda6af90e1e556b5a4bc6f6b2b64b4ee"
+        "a86f87708acd4d77a8d26317e7594d5cdda6af90e1e556b5a4bc6f6b2b64b4ee",
+        "9b5512da1670a8a92467b49e9ed9118d5d18969f93fb2981c329da763aaba28b"
       ]
     }
   },
@@ -46,15 +48,17 @@
     }
   },
   "paseo": {
-    "version": "0.1.1-draft",
+    "version": "0.2.0",
     "marker": "ai-agent-policy:paseo-policy",
     "source": "paseo.md",
     "known_sha256": {
       "claude": [
-        "518d45375ebdd7e5c259d382e0990c6cf56e7e16d10f8a99fea67a850fbd3955"
+        "518d45375ebdd7e5c259d382e0990c6cf56e7e16d10f8a99fea67a850fbd3955",
+        "b5e08fc019d10ece5cbd74fc7ca044b3599ca24bd2215e90b99292d037fc73eb"
       ],
       "codex": [
-        "518d45375ebdd7e5c259d382e0990c6cf56e7e16d10f8a99fea67a850fbd3955"
+        "518d45375ebdd7e5c259d382e0990c6cf56e7e16d10f8a99fea67a850fbd3955",
+        "b5e08fc019d10ece5cbd74fc7ca044b3599ca24bd2215e90b99292d037fc73eb"
       ]
     }
   },

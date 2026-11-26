@@ -70,7 +70,7 @@ def test_render_is_deterministic_with_exact_envelope(host, orca):
     assert a.endswith('-->\n') and not a.endswith('\n\n')
     assert '\r' not in a
     assert re.findall(r'^<!-- ai-agent-policy:(\S+) ', a, re.M)==['core-%s:start'%host, 'core-%s:end'%host]+(['orca-policy:start', 'orca-policy:end'] if orca else [])+['paseo-policy:start', 'paseo-policy:end']
-    assert (c['core']['version'], c['orca']['version'], c['paseo']['version'])==('1.5.0', '1.4.0', '0.1.1-draft')
+    assert (c['core']['version'], c['orca']['version'], c['paseo']['version'])==('1.5.1', '1.4.0', '0.2.0')
 
 def test_default_set_is_core_plus_paseo_and_orca_is_opt_in(capsys):
     c=cfg()
@@ -109,7 +109,7 @@ def test_orca_and_paseo_sources_are_separated():
     assert 'orca-worker-lifecycle.md' in orca
     bullets=[l for l in paseo.splitlines() if l.startswith('- ')]
     assert len(bullets)==3 and len(paseo.encode())<=1400
-    assert GATING in bullets[0] and '설치된 Paseo 스킬과 해당 프로젝트 지침' in bullets[0]
+    assert '프로젝트별 설치는 필수가 아니다' in bullets[0] and '설치된 Paseo 스킬과 해당 프로젝트 지침' in bullets[0]
     assert 'Worker는 재위임하지 않으며 Owner가 자식 목록을 점검한다' in bullets[0] and 'Codex는 Worker로만' in bullets[0]
     assert all(x in bullets[1] for x in ('턴 종료 신호', 'archive_agent', 'Human Gate'))
     for ref in ('paseo-agent-lifecycle.md', 'paseo-model-routing.md', 'policy/paseo-common.md'): assert ref in bullets[2]
@@ -135,7 +135,7 @@ def test_core_mentions_environments_only_in_orchestration_paragraph(host):
     assert 'Orca' in para and 'Paseo' in para
     rest=body[:i]+(body[j:] if j!=-1 else '')
     assert not re.search('orca|paseo', rest, re.I)
-    assert '병행기' not in body and '1.5.0' in body.splitlines()[0]
+    assert '병행기' not in body and '1.5.1' in body.splitlines()[0]
     body_para=para.split('\n', 2)[2].strip()
     assert '\n' not in body_para   # one short paragraph
     assert 'existing Orca' in body_para and '~/Project/ETC/ai-agent-policy/docs/orca-worker-lifecycle.md' in body_para and '`ai-agent-policy:paseo-policy`' in body_para
@@ -166,7 +166,7 @@ def test_every_legacy_sentence_is_accounted_for_in_core_or_paseo(host):
     par=next(l for l in old if l.startswith('For confirmed Paseo-managed work'))
     # only the title, the date line, the Paseo heading and the Paseo paragraph may differ; everything else is verbatim
     assert set(old)-set(core)=={old[0], '## Paseo and project policies', par}|{l for l in old if l.startswith('Updated: ')}
-    added=[l for l in core if l not in old and not l.startswith('Updated: ') and '1.5.0' not in l]
+    added=[l for l in core if l not in old and not l.startswith('Updated: ') and '1.5.1' not in l]
     assert added==[
         '## Project policies', 'Preserve user-owned work. Follow project Task IDs, branch mappings, documentation, and completion gates when applicable.',
         '## Orchestration environments', next(l for l in core if l.startswith('Orca-managed'))]
@@ -297,7 +297,7 @@ def test_hand_edited_current_block_is_unrecognized(tmp_path):
     code, res=apply('claude', t, tmp_path/'st', '--overwrite-unrecognized'); assert code==0 and t.read_bytes()==(PRE+gb.render('claude')+POST).encode('utf-8')
 
 def test_older_pinned_release_updates_but_older_unpinned_text_is_unrecognized(tmp_path, monkeypatch):
-    old_core=lambda b: b[0].replace('version=1.5.0', 'version=1.4.5').replace('Sonnet is the default', 'Sonnet was the default')
+    old_core=lambda b: b[0].replace('version=1.5.1', 'version=1.4.5').replace('Sonnet is the default', 'Sonnet was the default')
     t=current_target(tmp_path, lambda b: [old_core(b), b[1]])
     code, r=sync('claude', t); assert code==1 and r['error']=='unrecognized_block'   # lower version, text not pinned
     know(monkeypatch, 'core', 'claude', old_core([gb.render_blocks('claude')[0][1]]))
@@ -307,7 +307,7 @@ def test_older_pinned_release_updates_but_older_unpinned_text_is_unrecognized(tm
 @pytest.mark.parametrize('mutation', ('text edit', 'same text'))
 def test_newer_block_version_is_a_downgrade(tmp_path, mutation):
     def mut(b):
-        newer=b[0].replace('version=1.5.0', 'version=1.6.0')
+        newer=b[0].replace('version=1.5.1', 'version=1.6.0')
         return [newer.replace('Sonnet is the default', 'Sonnet is better') if mutation=='text edit' else newer, b[1]]
     t=current_target(tmp_path, mut); before=t.read_bytes()
     c, r=cli('check', '--host', 'claude', '--target', t); assert c==1 and r['blocks']['core']['status']=='newer'
@@ -318,9 +318,9 @@ def test_newer_block_version_is_a_downgrade(tmp_path, mutation):
     code, res=apply('claude', t, tmp_path/'st', '--overwrite-unrecognized'); assert code==0 and t.read_bytes()==(PRE+gb.render('claude')+POST).encode('utf-8')
 
 def test_unknown_version_string_with_unknown_text_is_unrecognized(tmp_path):
-    t=current_target(tmp_path, lambda b: [b[0].replace('version=1.5.0', 'version=banana').replace('Sonnet is the default', 'x'), b[1]])
+    t=current_target(tmp_path, lambda b: [b[0].replace('version=1.5.1', 'version=banana').replace('Sonnet is the default', 'x'), b[1]])
     code, r=sync('claude', t); assert code==1 and r['error']=='unrecognized_block'
-    t2=current_target(tmp_path, lambda b: [b[0].replace('version=1.5.0', 'version=banana'), b[1]], 't2.md')   # text differs only in the version
+    t2=current_target(tmp_path, lambda b: [b[0].replace('version=1.5.1', 'version=banana'), b[1]], 't2.md')   # text differs only in the version
     code, r=sync('claude', t2); assert code==1 and r['error']=='unrecognized_block'
 
 def test_draft_suffix_sorts_before_the_plain_release():
@@ -347,7 +347,7 @@ def know(monkeypatch, name, host, text):
 
 def test_current_blocks_update_in_place_keeping_text_between_and_around(tmp_path, monkeypatch):
     blocks=[t for _, t in gb.render_blocks('claude', selected=ALL)]
-    core=blocks[0].replace('version=1.5.0', 'version=1.0.0').replace('Sonnet is the default', 'Sonnet was the default')
+    core=blocks[0].replace('version=1.5.1', 'version=1.0.0').replace('Sonnet is the default', 'Sonnet was the default')
     orca=blocks[1].replace('version=1.4.0', 'version=0.9.0')
     know(monkeypatch, 'core', 'claude', core); know(monkeypatch, 'orca', 'claude', orca)
     mid=core+'\n사이 텍스트 ✓\n\n'+orca+'\n\n\n'+blocks[2]
@@ -664,3 +664,10 @@ def test_documented_block_sizes_match_the_render():
         leg=len(legacy(host).encode('utf-8')); default=len(gb.render(host).encode('utf-8')); full=len(R(host, True).encode('utf-8'))
         row=next(l for l in doc.splitlines() if l.startswith('| %s |'%host))
         assert [c.strip() for c in row.strip('|').split('|')]==[host, str(bl['core']), str(bl['paseo']), str(bl['orca']), str(leg), str(default), '%+d'%(default-leg), str(full), '%+d'%(full-leg)]
+
+
+def test_paseo_global_policy_supports_root_and_worker_without_project_install():
+    source=(REPO/'policy'/'global'/'paseo.md').read_text(encoding='utf-8')
+    assert '프로젝트별 설치는 필수가 아니다' in source
+    assert 'Root' in source and '사용자의 명시적 Paseo 업무 요청' in source
+    assert '부모 라벨' in source

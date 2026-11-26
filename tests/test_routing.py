@@ -13,6 +13,40 @@ C=routing.load_config()
 def r(**k): return routing.route(C, **k)
 def pick(x): return (x['alias'], x['effort'])
 
+class SharedRouteMigrationTests(unittest.TestCase):
+    def test_shared_routes_reject_premium_as_routine_candidate(self):
+        import copy
+        cfg = copy.deepcopy(C)
+        cfg['hosts']['orca']['task_routes_key'] = 'task_routes'
+        cfg['hosts']['paseo']['task_routes_key'] = 'task_routes'
+        cfg['task_routes']['feature'] = [['opus', 'high']]
+        with tempfile.TemporaryDirectory() as d:
+            path = Path(d) / 'routing.json'
+            path.write_text(json.dumps(cfg))
+            with self.assertRaises(PolicyError):
+                routing.load_config(path)
+
+    def test_shared_routes_preserve_both_hosts_and_legacy_config(self):
+        import copy
+        new = copy.deepcopy(C)
+        old = copy.deepcopy(C)
+        old['orca_task_routes'] = old.pop('task_routes')
+        old['hosts']['orca'].pop('task_routes_key')
+        old['hosts']['paseo']['task_routes_key'] = 'orca_task_routes'
+        new['hosts']['orca']['task_routes_key'] = 'task_routes'
+        new['hosts']['paseo']['task_routes_key'] = 'task_routes'
+        with tempfile.TemporaryDirectory() as d:
+            path = Path(d) / 'routing.json'
+            path.write_text(json.dumps(new))
+            loaded = routing.load_config(path)
+            path.write_text(json.dumps(old))
+            old = routing.load_config(path)
+        for host in ('orca', 'paseo'):
+            for task in old['orca_task_routes']:
+                with self.subTest(host=host, task=task):
+                    self.assertEqual(pick(routing.route(old, host=host, task_type=task)),
+                                     pick(routing.route(loaded, host=host, task_type=task)))
+
 class RoutingTests(unittest.TestCase):
     def test_simple(self):
         for t in ('docs','tests','rename'):

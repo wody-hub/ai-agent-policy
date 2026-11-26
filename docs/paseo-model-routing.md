@@ -1,6 +1,6 @@
-# Paseo 모델 라우팅 (draft 0.1.1)
+# Paseo 모델 라우팅 (0.2.0)
 
-상태: 초안(2026-11-25, 같은 날 사용자 확정 결정 반영, Q3 Codex 리뷰어 읽기 전용은 2026-11-25 시험 결과로 확정: plan_mode 권장, 강제 주장 금지, 무변경 검사 필수). **정본은 [`policy/model-routing.json`](../policy/model-routing.json)(1.7.0)이다.** Paseo 프로필의 provider·model·modeId·thinkingOptionId·notes는 JSON의 `paseo_profiles`에서 파생되며, `python3 -B -m ai_policy.paseo check|sync`가 `~/.paseo/config.json`과 대조·반영한다(6절). `sync`는 앞의 네 필드만 맞추고 `notes`는 프로필을 새로 만들 때만 쓴다(기존 프로필의 `notes` 차이는 `check`의 `notes_differ` 정보로만 보인다). 이 문서는 그 값을 Paseo 프로필에 대응시키는 규칙이다. 1.7.0은 1.6.0(P1~P4)과 main의 수평 단계·교차 계열 리뷰 변경을 합친 것이고 P5를 적용했다(5절). 라우터는 `--host paseo`를 지원한다. Orca용 세부 유형표는 [Orca 작업 유형별 모델 라우팅](orca-model-routing.md)을 그대로 쓴다.
+상태: 승인(2026-11-26). 미검증 모델 접근과 임시 프로필은 별도로 표시한다. Codex 리뷰어 plan_mode는 권장 사항이며 강제 차단으로 보지 않고 무변경 검사를 한다. **정본은 [`policy/model-routing.json`](../policy/model-routing.json)(1.7.1)이다.** Paseo 프로필의 provider·model·modeId·thinkingOptionId·notes는 JSON의 `paseo_profiles`에서 파생되며, `python3 -B -m ai_policy.paseo check|sync`가 `~/.paseo/config.json`과 대조·반영한다(6절). `sync`는 앞의 네 필드만 맞추고 `notes`는 프로필을 새로 만들 때만 쓴다(기존 프로필의 `notes` 차이는 `check`의 `notes_differ` 정보로만 보인다). 이 문서는 그 값을 Paseo 프로필에 대응시키는 규칙이다. 1.7.0은 1.6.0(P1~P4)과 main의 수평 단계·교차 계열 리뷰 변경을 합친 것이고 P5를 적용했다(5절). 라우터는 `--host paseo`를 지원한다. 세부 유형표는 [공통 작업 유형 라우팅](task-model-routing.md)을 사용한다.
 
 ## 1. 원칙
 
@@ -44,7 +44,7 @@
 
 ## 3. 선택 절차
 
-1. 우선순위대로 판정: 필수 고위험 전문 경로(`high_risk_types`, LEVEL 4 유형) → 프로젝트·사용자 명시 지정 → 단순 작업 조건(명확한 소범위·자동 검증 가능·저위험을 모두 충족하면 LEVEL 1) → 작업 유형(`orca_task_routes`) → 복잡도 기본값(`levels`).
+1. 우선순위대로 판정: 필수 고위험 전문 경로(`high_risk_types`, LEVEL 4 유형) → 프로젝트·사용자 명시 지정 → 단순 작업 조건(명확한 소범위·자동 검증 가능·저위험을 모두 충족하면 LEVEL 1) → 작업 유형(`task_routes`) → 복잡도 기본값(`levels`).
 2. 저장소 checkout이 있으면 라우터를 `--host paseo`로 실행해 판정을 얻는다: `python3 -B -m ai_policy.routing --host paseo --task-type <유형>`(또는 `--role`, `--level`, `--failures`, `--failure-kind`, `--available`). `action`이 `blocked_no_available_model`(종료 40)·`handoff_to_lead`(종료 41)이면 Worker를 만들지 않고 상위 Owner에 보고한다. Paseo 호스트 출력은 `orca_worker_args`를 비우고 `paseo_create_agent`(`provider`=`<tool>/<model>`, `settings.modeId`·`thinkingOptionId`, 리뷰의 `settings.features`)와 `paseo_profile`(2절 프로필 이름)을 준다. `paseo_profile`은 임시(provisional)가 아닌 프로필의 파생값(6.1절)과 라우터 결과의 모델 id·`modeId`·thinking이 모두 같을 때만 이름을 주고, 하나라도 다르면 null이다(예: Terra 수평 단계, 새 캐시 id, plan 모드로 도는 `important_review`, 임시 프로필만 맞는 Astra). 프로필에는 매개변수가 없으므로 Owner가 `paseo_create_agent` 값을 `create_agent`에 복사하거나 프로필의 값을 복사한다. `thinkingOptionId`는 effort 이름을 그대로 쓰며 대상 모델이 그 옵션을 지원하는지는 `inspect_provider`/`list_models`로 확인한다(미확인). 프로필 실제 값이 정책 JSON 파생값과 다르면 JSON이 정본이다(6절 `check`로 확인하고 `sync`로 맞춘다). 사용 불가·승격·처리 결과는 같은 `action` 규약(종료 40·41)을 따른다.
    추가 입력(모든 호스트 공통): `--failed-family claude|codex|both`(쉼표 구분, LEVEL 4에서 실패한 계열. 순서는 무시하며 두 계열을 주면 `both`와 같다. 하나만 주면 LEVEL 5에서 반대 계열 후보를 먼저 쓰고 `l5_opposite_family:<alias>`를 남긴다. 쓸 수 없으면 `l5_opposite_family_unavailable`, `both`·없음은 호스트 기본, 그 밖은 `unknown_failed_family`), `--failed-model <별칭 또는 id>`(LEVEL 4에서 그 모델을 건너뛴다, `excluded_failed_model:<alias>`, 남는 후보가 없으면 `blocked_no_available_model`), `--implementer-family claude|codex`(리뷰 유형에서 리뷰어를 반대 계열로 고른다, 3.1절, 그 밖은 `unknown_implementer_family`). 결과에 `lateral`, `degraded_independence`, `premium_requires_reason`(premium·exceptional 선택이면 true, 차단되면 false)이 항상 들어간다.
    LEVEL 2 수평 단계: 레벨 기준 선택(`--level`·작업 유형)에서 계수 대상 실패가 1회 쌓이면 두 번째이자 마지막 LEVEL 2 시도는 `levels.2.lateral.paseo`(Terra high)로 간다(`lateral: true`, 이유 `lateral_step`, 대체 후보 없음). Terra를 쓸 수 없으면 `lateral_unavailable:terra`로 곧장 LEVEL 3으로 올린다. 역할(`--role`)과 비모델 실패에는 적용하지 않는다. 또한 첫 시도가 실제로 쓴 모델(작업 유형 경로의 첫 항목, 없으면 레벨 값)과 같은 도구의 수평 모델일 때만 적용하고, `cross_family_review.task_types`(리뷰 유형)에는 적용하지 않는다. 적용하지 않는 경우 실패 1회 재시도는 같은 경로를 그대로 다시 쓴다(예: `code_review_codex`는 Sonnet, `diagnose_codex_failure`는 Sonnet, `requirements`는 Sonnet). 이 단계는 Orca·codex 호스트 출력도 바꾼다(Claude 호스트는 수평 항목이 없다). 레벨당 2회 시도이므로 LEVEL 1에서 시작하면 LEVEL 4 전까지 최대 6회, 전체 10회다.
@@ -84,7 +84,7 @@
 
 정본 `model-routing.json`은 1.7.0이며 변경 이력(`changelog`)을 포함한다. 1.7.0은 `docs/paseo-policy-source`의 1.6.0(P1~P4)과 main의 58037de(번호 없는 1.6.0)를 합치고 P5를 적용한 것이다. 1.6.0과 달리 **Orca·codex 호스트 출력도 바뀐다**(LEVEL 2 수평 단계: 실패 1회 뒤 두 번째 시도가 Luna에서 Terra로 간다). 그 밖에 `failed_family`·`failed_models`·`implementer_family` 입력, `cross_family_review`, `premium_requires_reason`, 모델 id 갱신이 들어갔다.
 
-- **P1 host 추가 — 반영.** `hosts.paseo = {"tools": ["claude","codex"], "orchestrator_tools": ["claude"], "alternatives_key": "paseo_alternatives", "task_routes_key": "orca_task_routes", "default_mode_id": "auto", ...}`. 라우터는 `--host paseo` 출력으로 `paseo_create_agent`·`paseo_profile`·`paseo_review`를 내고 Paseo 호스트에서는 `orca_worker_args`를 비운다. 작업 유형 경로(`orca_task_routes`)는 Paseo 호스트가 공유한다. 모든 레벨·역할에 `paseo` 항목이 있다(레벨은 Orca 값과 동일).
+- **P1 host 추가 — 반영.** `hosts.paseo = {"tools": ["claude","codex"], "orchestrator_tools": ["claude"], "alternatives_key": "paseo_alternatives", "task_routes_key": "task_routes", "default_mode_id": "auto", ...}`. 라우터는 `--host paseo` 출력으로 `paseo_create_agent`·`paseo_profile`·`paseo_review`를 내고 Paseo 호스트에서는 `orca_worker_args`를 비운다. 작업 유형 경로(`task_routes`)는 Orca와 Paseo가 공유한다. 모든 레벨·역할에 `paseo` 항목이 있다(레벨은 Orca 값과 동일).
 - **P2 역할 기본값 — 반영(Q7 결정됨).** Paseo 호스트에서 `root_orchestrator`·`project_coordinator`는 Sonnet high이고 대체가 없다(`paseo_alternatives: []`). `orchestrator: true` 역할은 `orchestrator_tools`(Claude)만 후보가 되므로 Codex는 제외되고, 사용할 수 없으면 `blocked_no_available_model`(종료 40)이다. 승격으로 레벨이 올라간 뒤와 수평 단계의 Terra는 Worker로 취급한다. 로더는 오케스트레이터 역할의 프로필이 `orchestrator_tools` 밖의 도구를 쓰면 거부한다. **Orca 호스트의 `project_coordinator` 대체 목록(Terra high)에는 Sonnet high를 추가하지 않았다.**
 - **P3 프로필 블록 — 반영·확장.** `paseo_profiles`는 이제 관리 대상 프로필의 정본이다(6.1절 스키마). 1.6.0의 이름 전용 맵을 확장했다.
 - **P4 리뷰 mode — 반영.** `review_mode`: claude는 `modeId: plan`(`enforced: null`, 쓰기 시도 검증 안 됨), codex는 `modeId: auto` + `features.plan_mode=true`, `enforced: false`, `evidence: git_status_diff_unchanged`. 대상 유형은 `cross_family_review.task_types`와 같고(`important_review` 추가), `security_review`는 쓰기 차단이 필요한 유형(`write_block_required`)이다. Codex 리뷰어가 선택되면 이유에 `review_write_block_requires_claude_plan`을 남긴다.
@@ -103,7 +103,7 @@
 | 키 | 의미 |
 |---|---|
 | 선택자 `role` \| `level` \| `task_types` | 최대 하나. `role`은 `roles.<이름>.paseo`, `level`은 `levels.<n>.paseo`에서 값을 가져온다. `task_types`는 `expect`가 필수다 |
-| `expect` | `[alias, effort]`(effort는 null 가능). 선택자의 후보(호스트 기본·`paseo_alternatives`·`lateral`·그 유형의 `orca_task_routes` 항목) 중 하나여야 한다 |
+| `expect` | `[alias, effort]`(effort는 null 가능). 선택자의 후보(호스트 기본·`paseo_alternatives`·`lateral`·그 유형의 `task_routes` 항목) 중 하나여야 한다 |
 | `description` | 프로필 `notes`가 된다 |
 | `provisional` | true면 라우터가 이름으로 안내하지 않고, `sync`는 `--include-provisional`일 때만 만든다. 없어도 드리프트가 아니다 |
 | `mode_id` | modeId 직접 지정 |
