@@ -77,13 +77,23 @@ def test_module_runs_as_script():
     assert r.returncode==0 and r.stdout==gb.render('claude')
 
 # ---- separation -----------------------------------------------------------------------------------------------------------------------------
+GATING='Paseo 프로젝트 정책이 설치되고 Paseo 업무 context가 확인되면(부모 에이전트의 배정 메시지와 부모 라벨 `paseo.parent-agent-id`가 증거이며, `PASEO_AGENT_ID` 환경 변수·Paseo CLI 설치·Paseo MCP 도구 존재만으로는 Paseo 업무로 판정하지 않는다) 실행 위치·Root/Coordinator/Worker 역할·모델 선택·정산·최소 Task 등록 부트스트랩은 그 정책을 따른다.'
+
 def test_orca_and_paseo_sources_are_separated():
     orca=(GLOBAL/'orca.md').read_text(encoding='utf-8'); paseo=(GLOBAL/'paseo.md').read_text(encoding='utf-8')
     assert 'paseo' not in orca.lower() and 'orca' not in paseo.lower()
     assert '병행기' in orca and orca.count('병행기·보관')==1 and '병행기' not in paseo
     assert 'orca-worker-lifecycle.md' in orca
-    assert 'paseo_profiles' in paseo and 'paseo daemon reload' in paseo and 'paseo.parent-agent-id' in paseo
-    for ref in ('paseo-agent-lifecycle.md', 'paseo-model-routing.md', 'paseo-common.md'): assert ref in paseo
+    bullets=[l for l in paseo.splitlines() if l.startswith('- ')]
+    assert len(bullets)==3 and len(paseo.encode())<=1400
+    assert GATING in bullets[0] and '설치된 Paseo 스킬과 해당 프로젝트 지침' in bullets[0]
+    assert 'Worker는 재위임하지 않으며 Owner가 자식 목록을 점검한다' in bullets[0] and 'Codex는 Worker로만' in bullets[0]
+    assert all(x in bullets[1] for x in ('턴 종료 신호', 'archive_agent', 'Human Gate'))
+    for ref in ('paseo-agent-lifecycle.md', 'paseo-model-routing.md', 'policy/paseo-common.md'): assert ref in bullets[2]
+    # profile mechanics live in docs/paseo-model-routing.md, not in the always-loaded block
+    assert 'paseo_profiles' not in paseo and 'daemon reload' not in paseo and 'paseo_create_agent' not in paseo
+    doc=(REPO/'docs'/'paseo-model-routing.md').read_text(encoding='utf-8')
+    for fact in ('--host paseo', 'paseo_create_agent', 'paseo_profile', 'plan_mode', 'ai_policy.paseo sync', 'daemon reload'): assert fact in doc
 
 def test_orca_keeps_the_production_release_rule_and_does_not_misattribute_it():
     orca=(GLOBAL/'orca.md').read_text(encoding='utf-8')
