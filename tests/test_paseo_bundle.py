@@ -171,10 +171,10 @@ class InstallTests(unittest.TestCase):
         r=subprocess.run([str(entry),'check','--home',str(self.home),'--flavor','paseo'],cwd=hostile,env=env,capture_output=True,timeout=15)
         self.assertEqual(r.returncode,0,r.stderr.decode()); self.assertTrue(json.loads(r.stdout)['files_valid'])
         r=subprocess.run([str(entry),'guide','--explicit-request','--flavor','paseo'],cwd=hostile,env=env,capture_output=True,timeout=15)
-        self.assertEqual(r.returncode,0,r.stderr.decode()); self.assertIn(b'Shared Paseo',r.stdout)   # installed generation stores the manifest as bundle.json
+        self.assertEqual(r.returncode,0,r.stderr.decode()); self.assertIn(b'Paseo orchestration policy',r.stdout)   # installed generation stores the manifest as bundle.json
         r=subprocess.run([str(entry),'guide','--explicit-request'],cwd=hostile,env=env,capture_output=True,timeout=15)
         # The installed Paseo entrypoint fixes its own flavor: the default --flavor orca is overridden, never emitting Orca policy.
-        self.assertEqual(r.returncode,0,r.stderr.decode()); self.assertIn(b'Shared Paseo',r.stdout); self.assertNotIn(b'Shared Orca',r.stdout)
+        self.assertEqual(r.returncode,0,r.stderr.decode()); self.assertIn(b'Paseo orchestration policy',r.stdout); self.assertNotIn(b'Shared Orca',r.stdout)
         r=subprocess.run([str(entry),'context','--mode','auto','--format','text'],cwd=hostile,env=env,capture_output=True,timeout=15)
         self.assertEqual((r.returncode,r.stdout),(20,b''),r.stderr.decode())   # env hint only: ambiguous, no policy emitted
         env.pop('PASEO_AGENT_ID')
@@ -184,7 +184,7 @@ class InstallTests(unittest.TestCase):
 
     def test_cli_guide_and_install_with_flavor(self):
         def run(*a): return subprocess.run([sys.executable,'-B','-m','ai_policy',*map(str,a)],cwd=ROOT,capture_output=True,timeout=25)
-        r=run('guide','--explicit-request','--flavor','paseo'); self.assertEqual(r.returncode,0,r.stderr.decode()); self.assertIn(b'Shared Paseo',r.stdout)
+        r=run('guide','--explicit-request','--flavor','paseo'); self.assertEqual(r.returncode,0,r.stderr.decode()); self.assertIn(b'Paseo orchestration policy',r.stdout)
         r=run('guide','--explicit-request'); self.assertIn(b'Shared Orca',r.stdout)
         r=run('guide','--explicit-request','--flavor','paseo','--bundle',ORCA); self.assertEqual(r.returncode,30)
         r=run('install','--home',self.home,'--bundle',PASEO,'--flavor','paseo','--dry-run'); self.assertEqual(r.returncode,0,r.stderr.decode())

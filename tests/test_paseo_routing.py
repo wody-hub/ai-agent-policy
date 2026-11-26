@@ -16,9 +16,10 @@ def pick(x): return (x['alias'], x['effort'])
 
 class PaseoRoutingTests(unittest.TestCase):
     def test_config_version_and_changelog(self):
-        self.assertEqual(C['version'], '1.7.0')
-        self.assertEqual(C['changelog'][0]['version'], '1.7.0')
-        self.assertEqual(C['changelog'][1]['version'], '1.6.0')
+        self.assertEqual(C['version'], '1.7.1')
+        self.assertEqual(C['changelog'][0]['version'], '1.7.1')
+        self.assertEqual(C['changelog'][1]['version'], '1.7.0')
+        self.assertEqual(C['changelog'][2]['version'], '1.6.0')
         self.assertEqual(C['verified_on'], '2026-11-25')
         self.assertIn('claude-fable-5-2', C['verification_scope']['verified'])
         self.assertIn('claude-haiku-5-5', C['verification_scope']['not_verified'])
