@@ -1,6 +1,6 @@
 # Shared Paseo orchestration policy · 0.1.1-draft
 
-상태: 초안(2026-11-25, paseo-policy-migration 1단계, 같은 날 사용자 확정 결정 반영; 2B에서 Hermes 미사용·relay 유지·Q6~Q10 결정 반영, 0.1.1-draft). 사용자 검토·승인 전에는 설치·배포 대상이 아니다. 기존 `policy/orca-common.md`(0.2.2)를 즉시 대체하지 않는다. 퇴역은 병행기 후로 확정되었다(아래 §1). 상세 절차는 [Paseo agent lifecycle](../docs/paseo-agent-lifecycle.md), [Paseo model routing](../docs/paseo-model-routing.md), 설계 근거와 판정표는 [migration design](../docs/paseo-migration-design.md)에 둔다.
+상태: 초안(2026-11-25, paseo-policy-migration 1단계, 같은 날 사용자 확정 결정 반영; 2B에서 Hermes 미사용·relay 유지·Q6~Q10 결정 반영, 0.1.1-draft). 전역 지침의 Paseo 블록은 2026-11-26 승인·적용되었다. 이 문서 전체의 설치·배포 승인을 뜻하지 않으며 프로젝트별 맥락 전달과 훅 없는 준비 절차는 2026-11-26 승인되었다. 기존 `policy/orca-common.md`(0.2.2)를 즉시 대체하지 않는다. 퇴역은 병행기 후로 확정되었다(아래 §1). 상세 절차는 [Paseo agent lifecycle](../docs/paseo-agent-lifecycle.md), [Paseo model routing](../docs/paseo-model-routing.md), 설계 근거와 판정표는 [migration design](../docs/paseo-migration-design.md)에 둔다.
 
 ## 1. 적용 조건
 
@@ -31,7 +31,7 @@
 - 새 업무는 `create_workspace`의 `isolation: worktree`, `mode: branch-off`, 명시한 `baseBranch`(feature·release는 통합 브랜치, hotfix는 운영 브랜치)와 Gitflow 브랜치명 `branchName`으로 만든다. 생성 전에 기준 ref를 SHA로 확정해 기록하고, 생성 후 worktree의 초기 `HEAD`가 그 SHA와 같은지, realpath·Git 루트·브랜치·워크스페이스 ID·프로젝트 ID를 확인한다. 기능 브랜치에서 요청해도 기능 브랜치에서 분기하지 않는다.
 - Git 기준(ref·SHA)과 Paseo 관계(프로젝트 소속, 에이전트 부모 라벨)는 서로 다른 사실이다. 어느 하나가 다른 하나를 증명하지 않으므로 각각 확인·기록한다.
 - 같은 업무의 후속 작업은 기존 워크스페이스를 재사용한다. 워크스페이스 격리는 DB·포트·외부 시스템 격리가 아니다. 한 파일의 쓰기 권한은 한 Worker에게만 준다.
-- 로컬 정책 설치가 필요한 프로젝트는 새 worktree마다 정책 설치·검증을 마친 뒤 일반 Worker를 배정한다. 미추적 설치 파일은 새 worktree로 상속되지 않는다. 절차는 lifecycle 문서를 따른다.
+- 새 worktree마다 전역 정책을 재설치하지 않는다. 프로젝트 고유 지침이 필요한 경우 해당 worktree에서 접근·전달 여부를 확인한 뒤 배정한다. 미추적 파일은 새 worktree로 상속되지 않는다. 기본 절차에 훅·guard 자동 차단은 없으며 준비 확인 절차는 lifecycle 문서를 따른다.
 
 ## 4. 모델 라우팅
 

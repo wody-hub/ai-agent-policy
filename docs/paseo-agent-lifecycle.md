@@ -1,6 +1,6 @@
 # Paseo agent lifecycle (draft 0.1.0)
 
-상태: 초안(2026-11-25, 같은 날 사용자 확정 결정 반영). [Orca Worker lifecycle rulebook](orca-worker-lifecycle.md)에 대응하는 Paseo용 규칙이다. 승인 전에는 Orca 문서를 대체하지 않는다. 퇴역은 병행기 후다: 기존 Orca가 소유한 진행 중 Run·worktree만 Orca 규칙으로 마무리하고 새 Task는 즉시 이 문서를 따르며, 모든 Orca Run 정산·release 확인 뒤 Orca 문서를 «보관» 표시한다([migration design](paseo-migration-design.md) 5절 Q1). 공통 원칙은 [paseo-common](../policy/paseo-common.md)을 따른다.
+상태: 운영 지침 초안. 전역 블록은 2026-11-26 승인·적용됐으며 이 문서 전체의 승인을 뜻하지 않는다. 4.2절의 훅 없는 준비 절차는 2026-11-26 승인되었다. [Orca Worker lifecycle rulebook](orca-worker-lifecycle.md)에 대응하는 Paseo용 규칙이다. 승인 전에는 Orca 문서를 대체하지 않는다. 퇴역은 병행기 후다: 기존 Orca가 소유한 진행 중 Run·worktree만 Orca 규칙으로 마무리하고 새 Task는 즉시 이 문서를 따르며, 모든 Orca Run 정산·release 확인 뒤 Orca 문서를 «보관» 표시한다([migration design](paseo-migration-design.md) 5절 Q1). 공통 원칙은 [paseo-common](../policy/paseo-common.md)을 따른다.
 
 근거 표기: [DOC]/[SRC]/[GH]는 `.local-artifacts/paseo-migration/evidence/paseo-technical-research.md`(Paseo v0.17.4, 소스 commit 8b2e14f, 2026-11-24)의 표기를 따른다. [MCP]는 2026-11-25 이 세션에서 읽은 Paseo MCP 도구 스키마다. [미확인]은 실행으로 검증하지 않은 항목이다. [관측]은 2026-11-25 이 세션의 설정 파일 읽기·`inspect_provider`·Worker 실행에서 직접 확인한 사실이다.
 
@@ -59,16 +59,12 @@
 6. 여러 저장소에 걸친 업무는 저장소별 워크스페이스로 나누고 하나의 Task ID로 연결하며 저장소별 기준 SHA를 기록한다.
 7. Orca의 "기준 워크스페이스 자식(parent)" 개념은 Paseo에 없다. Paseo 워크스페이스는 프로젝트 소속만 가진다. 따라서 "Git base와 부모는 별개 사실" 원칙은 Paseo에서 (a) Git 기준 ref·SHA, (b) Paseo 프로젝트 ID, (c) Worker의 부모 에이전트 라벨을 각각 확인하는 규칙이 된다. Orca의 `--no-parent` 금지 규칙은 대상이 없어 폐기하고, 그 목적(기능 브랜치에서 재분기 금지)은 `baseBranch` 명시와 HEAD 확인으로 유지한다.
 
-### 4.2 정책 설치 준비 (worktree readiness 대응)
+### 4.2 작업 지침 준비
 
-Orca 규칙의 개념을 그대로 이월한다.
-
-1. 로컬 정책 설치가 필요한 프로젝트는 worktree 생성과 별도로 정책 설치 단계를 거친 뒤 일반 Worker를 배정한다. Git worktree 생성이 무시(ignored) 파일을 복사했다고 가정하지 않는다.
-2. 프로젝트의 검토된 버전별 manifest(진입 지침, 정책 snapshot·manifest, guard, 클라이언트별 hook 설정)에 따라 지원 설치 도구로 설치하거나, 프로젝트가 허용하면 담당 AI가 검증된 원본에서 명시된 파일만 덮어쓰지 않고 복사한다. 복사 후 bytes·권한을 원본·manifest와 대조하고 원본 버전·해시·대상·결과를 기록한다. 비밀·개인 Task context·무관한 설정은 복사하지 않는다.
-3. worktree 생성 / 파일 설치 / 클라이언트 신뢰 / hook 실제 로딩을 서로 다른 상태로 기록한다. `paseo.json` setup 훅 성공이나 워크스페이스 생성 성공만으로 준비 완료로 보지 않는다.
-4. 파일이 없으면 "정책 설치 필요", 설치 bytes·hook 로딩을 확인할 수 없으면 구체적 차단 사유를 기록하고 일반 배정을 멈춘다. Task·worktree·변경을 보존하고 승인된 설치·복구 경로를 같은 worktree에 적용한다. worktree를 다시 만들거나 클라이언트를 바꾸거나 같은 생성을 반복해 검사를 피하지 않는다.
-5. 일반 업무 재개 전 새 세션에서 선택한 클라이언트의 정책·hook 로딩과 허용/거부 사례를 확인한다. guard의 Paseo 모드는 (1) `paseo.json` setup 훅으로 정책(guard·hook 설정) 설치를 자동화하고 (2) 새 세션에서 hook이 실제 로딩되는 것을 확인한 **뒤에만** 켠다(Q2, 2단계 L4 검토 대상). guard는 완전한 샌드박스가 아니다. Codex 에이전트는 Paseo worktree의 Git 메타데이터 쓰기가 샌드박스에 막혀 설치 파일의 `git add/commit`이 안 되므로 [관측], 설치·commit 단계는 Claude Worker 또는 Owner가 맡는다. 이 사례는 Codex 세션의 AGENTS.md·hook 로딩 확인(미확인)과 함께 첫 사용 시 점검한다. Paseo Claude 에이전트는 Claude Agent SDK로 로컬 `claude`를 실행하고 user·project·local 설정을 읽는다고 되어 있으나 [SRC], 프로젝트 hook이 Paseo 경유 세션에서 실제로 실행되는지는 [미확인]이므로 첫 사용 시 확인한다.
-6. 프로젝트의 설치 전용 Task만 제한된 설치 예외로 진행할 수 있다.
+1. 전역 지침이 현재 세션에 전달됐는지 확인한다. 새 worktree마다 전역 정책을 재설치하지 않는다.
+2. 프로젝트 고유 Gitflow·Task·문서 경로 등은 실제 worktree에서 읽을 수 있는지 확인하고, 필요하면 검증된 원문과 배정 정보를 명시적으로 전달한다. 미추적 파일이 새 worktree에 복사됐다고 가정하지 않는다.
+3. 기준 ref/SHA, 실제 HEAD·경로·프로젝트 소속·에이전트 부모와 필수 지침 접근을 각각 확인한 뒤 배정한다. 접근이나 로딩을 확인하지 못하면 미확인으로 기록하고 필수 정보가 없으면 배정을 보류한다.
+4. 기본 절차는 setup 훅·클라이언트 hook·guard에 의존하지 않는다. 수동 확인은 자동 차단이나 샌드박스를 보장하지 않는다. 기존 프로젝트 보안 설정은 임의로 수정하지 않는다.
 
 ## 5. 정산과 정리 (settlement / worker-release 대응)
 

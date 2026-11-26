@@ -1,5 +1,7 @@
 # Orca → Paseo 정책 이전 설계 (paseo-policy-migration 1단계, 2B 반영)
 
+> 이 문서는 2026-11-25 당시의 역사적 설계 기록이다. Q2의 setup 훅·guard 기본 경로는 2026-11-26 승인된 [훅 없는 준비 절차](paseo-agent-lifecycle.md#42-작업-지침-준비)로 대체되었다. 아래 과거 결정은 현재 설치 지시가 아니다.
+
 작성 2026-11-25. 상태: 사용자 검토 대기 초안(2026-11-25 보정 반영, Q3 시험 결과 반영). 브랜치 `docs/paseo-policy-source`(base main @ 91a473a).
 
 ## 2026-11-25 보정 이력
