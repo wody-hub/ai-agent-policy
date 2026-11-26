@@ -85,6 +85,14 @@ def test_orca_and_paseo_sources_are_separated():
     assert 'paseo_profiles' in paseo and 'paseo daemon reload' in paseo and 'paseo.parent-agent-id' in paseo
     for ref in ('paseo-agent-lifecycle.md', 'paseo-model-routing.md', 'paseo-common.md'): assert ref in paseo
 
+def test_orca_keeps_the_production_release_rule_and_does_not_misattribute_it():
+    orca=(GLOBAL/'orca.md').read_text(encoding='utf-8')
+    for phrase in ('완료 조건과 운영 반영 필요 여부를 정한다', '실제 대상 환경, 반영된 릴리스 식별자, 반영 후 정상 동작 확인 결과와 근거를 모두 확인한 뒤 완료로 보고한다',
+                   '배포 대기·실패·미확인은 남은 조치와 함께 기록한다', '운영 반영이 없는 업무는 합의한 완료 조건과 필수 검증 결과로 닫는다'):
+        assert phrase in orca
+    pointer=next(l for l in orca.splitlines() if 'Controller resume and handoff' in l)
+    assert '운영 반영' not in pointer and 'Worker 결과' in pointer
+
 @pytest.mark.parametrize('host', HOSTS)
 def test_core_mentions_environments_only_in_orchestration_paragraph(host):
     body=(GLOBAL/('core.%s.md'%host)).read_text(encoding='utf-8')
