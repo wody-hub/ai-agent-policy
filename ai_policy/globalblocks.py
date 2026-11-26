@@ -22,7 +22,7 @@ HOSTS=('claude', 'codex')
 ORDER=('core', 'orca', 'paseo')
 NOTE='New sessions load the changed instruction files; running sessions keep the old text.'
 # Refusals that need a human decision exit 1; every other error exits 2.
-HUMAN_REFUSALS={'unrecognized_block', 'no_managed_block', 'partial_install', 'unexpected_block'}
+HUMAN_REFUSALS={'unrecognized_block', 'no_managed_block', 'partial_install', 'unexpected_block', 'downgrade_block'}
 TOKEN=re.compile(r'<!--\s*ai-agent-policy:')
 STRICT=re.compile(r'<!-- (ai-agent-policy:[A-Za-z0-9_-]+):(start|end)(?: version=([0-9A-Za-z][0-9A-Za-z._+-]*))? -->')
 BACKUP_NAME=re.compile(r'(.+)\.\d{8}T\d{6}Z\.([0-9a-f]{8})')
@@ -136,6 +136,20 @@ def classify(regions, selected):
     if sorted(names)==sorted(selected): raise PolicyError('out_of_order_markers')
     return 'partial'
 
+def _version_key(v):
+    """Comparable release key; a pre-release suffix (e.g. -draft) sorts before the plain release. None when the version is not x.y.z[-suffix]."""
+    m=re.fullmatch(r'(\d+)\.(\d+)\.(\d+)(?:-(.+))?', v or '')
+    return None if not m else (int(m.group(1)), int(m.group(2)), int(m.group(3)), 0 if m.group(4) else 1)
+
+def block_status(name, host, cfg, region_text, found_version, rendered_text):
+    """current: the exact current render. newer: the target block's version is newer than this tool's (applying would downgrade it).
+    known: text of an earlier release pinned in blocks.json. unrecognized: anything else (hand-edited, or an unknown/older unpinned text)."""
+    if region_text==rendered_text: return 'current'
+    found=_version_key(found_version); now=_version_key(cfg[name]['version'])
+    if found is not None and now is not None and found>now: return 'newer'
+    if digest(_e(region_text)) in cfg[name].get('known_sha256', {}).get(host, []): return 'known'
+    return 'unrecognized'
+
 def _outside(text, spans, collapse=False):
     """Text outside the regions: [before, between..., after]. With collapse only [before, after] (a legacy region becomes three blocks)."""
     parts=[]; pos=0
@@ -183,7 +197,8 @@ def run_check(a):
         if name=='legacy':
             h=digest(_e(text[s:e])); legacy={'present':True, 'known':h in cfg['legacy'][a.host]['known_sha256'], 'sha256':h, 'version_found':v}
         else:
-            blocks[name].update(present=True, version_found=v, up_to_date=text[s:e]==dict(rendered)[name])
+            st=block_status(name, a.host, cfg, text[s:e], v, dict(rendered)[name])
+            blocks[name].update(present=True, version_found=v, status=st, up_to_date=st=='current')
     if state=='legacy' and not legacy['known']: state='unrecognized'
     up=state=='current' and all(b['up_to_date'] for b in blocks.values())
     return {'schema':1, 'operation':'check', 'host':a.host, 'selected_blocks':selected, 'target':os.path.abspath(a.target), 'state':state, 'up_to_date':up,
@@ -213,12 +228,16 @@ def plan_sync(raw, target, host, cfg, *, selected=None, overwrite_unrecognized=F
     if [new_text[s:e] for _, s, e, _ in nregions]!=[t for _, t in rendered]: raise PolicyError('render_mismatch')
     old_span=text[regions[0][1]:regions[-1][2]]
     new_span=new_text[nregions[0][1]:nregions[-1][2]]
-    blocks=[]
+    blocks=[]; statuses=[]
     for i, (name, block) in enumerate(rendered):
-        if state=='legacy': action='add'
+        if state=='legacy': action='add'; status='absent'
         else:
-            _, s, e, _ = regions[i]; action='unchanged' if text[s:e]==block else 'update'
-        blocks.append({'name':name, 'marker':marker_of(cfg, name, host), 'version':cfg[name]['version'], 'action':action, 'lines':block.count('\n')})
+            _, s, e, v = regions[i]; status=block_status(name, host, cfg, text[s:e], v, block); action='unchanged' if status=='current' else 'update'
+        statuses.append(status)
+        blocks.append({'name':name, 'marker':marker_of(cfg, name, host), 'version':cfg[name]['version'], 'action':action, 'status':status, 'lines':block.count('\n')})
+    if not overwrite_unrecognized:
+        if 'newer' in statuses: raise PolicyError('downgrade_block')
+        if 'unrecognized' in statuses: raise PolicyError('unrecognized_block')
     body={'schema':1, 'operation':'sync', 'host':host, 'target':os.path.abspath(target), 'selected_blocks':selected, 'state':state, 'overwrite_unrecognized':bool(overwrite_unrecognized),
           'legacy':legacy, 'blocks':blocks, 'changes':sum(b['action']!='unchanged' for b in blocks),
           'diff':_line_counts(old_span, new_span),
@@ -369,6 +388,8 @@ def main(argv=None):
     p=argparse.ArgumentParser(prog='ai_policy.globalblocks'); sub=p.add_subparsers(dest='cmd', required=True)
     r=sub.add_parser('render', help='Print the three rendered blocks (core, orca, paseo) for a host')
     r.add_argument('--host', required=True, choices=HOSTS); r.add_argument('--with-orca', action='store_true', help='also render the orca block (not part of the default set)')
+    h=sub.add_parser('hashes', help='Print the sha256 of every currently rendered block (to pin a release in blocks.json known_sha256)')
+    h.add_argument('--host', required=True, choices=HOSTS)
     c=sub.add_parser('check', help='Read-only: report the managed-block state of a target file (exit 0 current, 1 needs change, 2 error)')
     c.add_argument('--host', required=True, choices=HOSTS); c.add_argument('--target', required=True, type=Path)
     c.add_argument('--with-orca', action='store_true', help='manage the orca block too (default set: core + paseo)')
@@ -386,6 +407,8 @@ def main(argv=None):
     try:
         if a.cmd=='render':
             print(render(a.host, None, selected_blocks(a.host, None, a.with_orca)), end=''); return 0
+        if a.cmd=='hashes':
+            print(json.dumps({'schema':1, 'host':a.host, 'blocks':{n:digest(_e(t)) for n, t in render_blocks(a.host, None, list(ORDER))}}, sort_keys=True, indent=2)); return 0
         value, code={'check':run_check, 'sync':run_sync, 'restore':run_restore}[a.cmd](a)
     except PolicyError as e:
         print(json.dumps({'schema':1, 'error':str(e)}, sort_keys=True)); return 1 if str(e) in HUMAN_REFUSALS else 2

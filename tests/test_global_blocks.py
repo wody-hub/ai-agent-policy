@@ -263,6 +263,64 @@ def test_default_install_never_writes_the_orca_block(tmp_path):
         assert 'orca-policy' not in txt and 'ai-agent-policy:core-%s:start'%host in txt and 'ai-agent-policy:paseo-policy:start' in txt
         assert cli('check', '--host', host, '--target', t)[0]==0
 
+# ---- known releases, hand edits, downgrades ------------------------------------------------------------------------------------------------
+@pytest.mark.parametrize('host', HOSTS)
+def test_known_sha256_pins_the_current_render_of_every_block(host):
+    """Failing here means a source text changed without pinning the release: run `python3 -B -m ai_policy.globalblocks hashes --host <host>`
+    and add the hash of the released block to blocks.json known_sha256."""
+    c=cfg()
+    for name, block in gb.render_blocks(host, c, list(gb.ORDER)):
+        assert sha(block.encode('utf-8')) in c[name]['known_sha256'][host], (name, host)
+
+def test_hashes_command_prints_current_block_hashes(capsys):
+    assert gb.main(['hashes', '--host', 'codex'])==0
+    out=json.loads(capsys.readouterr().out)
+    assert out['blocks']=={n: sha(b.encode('utf-8')) for n, b in gb.render_blocks('codex', cfg(), list(gb.ORDER))}
+
+def current_target(tmp_path, mutate, name='t.md'):
+    blocks=[t for _, t in gb.render_blocks('claude')]
+    t=tmp_path/name; t.write_text(PRE+'\n'.join(mutate(blocks))+POST, encoding='utf-8'); return t
+
+def test_hand_edited_current_block_is_unrecognized(tmp_path):
+    t=current_target(tmp_path, lambda b: [b[0].replace('Sonnet is the default', 'Sonnet is NOT the default'), b[1]]); before=t.read_bytes()
+    c, r=cli('check', '--host', 'claude', '--target', t); assert c==1 and r['blocks']['core']['status']=='unrecognized' and r['blocks']['paseo']['status']=='current'
+    for extra in ((), ('--plan-sha256', '0'*64)):
+        code, r=sync('claude', t, '--state-dir', tmp_path/'st', *extra); assert code==1 and r['error']=='unrecognized_block'
+    assert t.read_bytes()==before and not (tmp_path/'st').exists()
+    code, plan=sync('claude', t, '--state-dir', tmp_path/'st', '--overwrite-unrecognized'); assert code==0 and plan['blocks'][0]['status']=='unrecognized' and plan['blocks'][0]['action']=='update'
+    code, res=apply('claude', t, tmp_path/'st', '--overwrite-unrecognized'); assert code==0 and t.read_bytes()==(PRE+gb.render('claude')+POST).encode('utf-8')
+
+def test_older_pinned_release_updates_but_older_unpinned_text_is_unrecognized(tmp_path, monkeypatch):
+    old_core=lambda b: b[0].replace('version=1.5.0', 'version=1.4.5').replace('Sonnet is the default', 'Sonnet was the default')
+    t=current_target(tmp_path, lambda b: [old_core(b), b[1]])
+    code, r=sync('claude', t); assert code==1 and r['error']=='unrecognized_block'   # lower version, text not pinned
+    know(monkeypatch, 'core', 'claude', old_core([gb.render_blocks('claude')[0][1]]))
+    code, plan=sync('claude', t); assert code==0 and plan['blocks'][0]['status']=='known' and plan['blocks'][0]['action']=='update' and plan['blocks'][1]['action']=='unchanged'
+    code, res=apply('claude', t, tmp_path/'st'); assert code==0 and t.read_bytes()==(PRE+gb.render('claude')+POST).encode('utf-8')
+
+@pytest.mark.parametrize('mutation', ('text edit', 'same text'))
+def test_newer_block_version_is_a_downgrade(tmp_path, mutation):
+    def mut(b):
+        newer=b[0].replace('version=1.5.0', 'version=1.6.0')
+        return [newer.replace('Sonnet is the default', 'Sonnet is better') if mutation=='text edit' else newer, b[1]]
+    t=current_target(tmp_path, mut); before=t.read_bytes()
+    c, r=cli('check', '--host', 'claude', '--target', t); assert c==1 and r['blocks']['core']['status']=='newer'
+    for extra in ((), ('--plan-sha256', '0'*64)):
+        code, r=sync('claude', t, '--state-dir', tmp_path/'st', *extra); assert code==1 and r['error']=='downgrade_block'
+    assert t.read_bytes()==before and not (tmp_path/'st').exists()
+    code, plan=sync('claude', t, '--overwrite-unrecognized'); assert code==0 and plan['blocks'][0]['status']=='newer'
+    code, res=apply('claude', t, tmp_path/'st', '--overwrite-unrecognized'); assert code==0 and t.read_bytes()==(PRE+gb.render('claude')+POST).encode('utf-8')
+
+def test_unknown_version_string_with_unknown_text_is_unrecognized(tmp_path):
+    t=current_target(tmp_path, lambda b: [b[0].replace('version=1.5.0', 'version=banana').replace('Sonnet is the default', 'x'), b[1]])
+    code, r=sync('claude', t); assert code==1 and r['error']=='unrecognized_block'
+    t2=current_target(tmp_path, lambda b: [b[0].replace('version=1.5.0', 'version=banana'), b[1]], 't2.md')   # text differs only in the version
+    code, r=sync('claude', t2); assert code==1 and r['error']=='unrecognized_block'
+
+def test_draft_suffix_sorts_before_the_plain_release():
+    k=gb._version_key
+    assert k('0.1.1-draft')<k('0.1.1')<k('0.2.0')<k('1.0.0') and k('1.4.0')<k('1.5.0') and k('banana') is None and k('1.5')is None
+
 # ---- idempotence and in-place update ----------------------------------------------------------------------------------------------------------
 @pytest.mark.parametrize('host', HOSTS)
 def test_rerun_when_current_writes_nothing(tmp_path, host):
@@ -274,10 +332,18 @@ def test_rerun_when_current_writes_nothing(tmp_path, host):
     assert code==0 and res['applied'] is False and res['dry_run'] is False
     assert t.read_bytes()==b and os.stat(t).st_mtime_ns==m and files(tmp_path/'st'/'backups')==backups and files(tmp_path)==sorted(['CLAUDE.md' if host=='claude' else 'AGENTS.md', 'st'])
 
-def test_current_blocks_update_in_place_keeping_text_between_and_around(tmp_path):
+def know(monkeypatch, name, host, text):
+    """Pretend `text` is a pinned earlier release of a block (blocks.json known_sha256)."""
+    real=gb.load_config
+    def lc(*a):
+        c=real(*a); c[name]['known_sha256'][host]=list(c[name]['known_sha256'][host])+[sha(text.encode('utf-8'))]; return c
+    monkeypatch.setattr(gb, 'load_config', lc)
+
+def test_current_blocks_update_in_place_keeping_text_between_and_around(tmp_path, monkeypatch):
     blocks=[t for _, t in gb.render_blocks('claude', selected=ALL)]
     core=blocks[0].replace('version=1.5.0', 'version=1.0.0').replace('Sonnet is the default', 'Sonnet was the default')
     orca=blocks[1].replace('version=1.4.0', 'version=0.9.0')
+    know(monkeypatch, 'core', 'claude', core); know(monkeypatch, 'orca', 'claude', orca)
     mid=core+'\n사이 텍스트 ✓\n\n'+orca+'\n\n\n'+blocks[2]
     t=target(tmp_path, mid=mid); before=t.read_bytes()
     c, chk=cli('check', '--host', 'claude', '--target', t, '--with-orca')

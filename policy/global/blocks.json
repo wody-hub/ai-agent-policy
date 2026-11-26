@@ -22,17 +22,41 @@
     "markers": {
       "claude": "ai-agent-policy:core-claude",
       "codex": "ai-agent-policy:core-codex"
+    },
+    "known_sha256": {
+      "claude": [
+        "1156aee8f496df503b51d0b47c47933271b5f5901a5ca2ce80379be26b8b1e0c"
+      ],
+      "codex": [
+        "a86f87708acd4d77a8d26317e7594d5cdda6af90e1e556b5a4bc6f6b2b64b4ee"
+      ]
     }
   },
   "orca": {
     "version": "1.4.0",
     "marker": "ai-agent-policy:orca-policy",
-    "source": "orca.md"
+    "source": "orca.md",
+    "known_sha256": {
+      "claude": [
+        "1a408ab5903f7cc566361ef47af786296f8a5f3e4bab9232aae1da308583a162"
+      ],
+      "codex": [
+        "1a408ab5903f7cc566361ef47af786296f8a5f3e4bab9232aae1da308583a162"
+      ]
+    }
   },
   "paseo": {
     "version": "0.1.1-draft",
     "marker": "ai-agent-policy:paseo-policy",
-    "source": "paseo.md"
+    "source": "paseo.md",
+    "known_sha256": {
+      "claude": [
+        "518d45375ebdd7e5c259d382e0990c6cf56e7e16d10f8a99fea67a850fbd3955"
+      ],
+      "codex": [
+        "518d45375ebdd7e5c259d382e0990c6cf56e7e16d10f8a99fea67a850fbd3955"
+      ]
+    }
   },
   "legacy": {
     "claude": {
