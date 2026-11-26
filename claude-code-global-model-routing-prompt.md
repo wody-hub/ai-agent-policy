@@ -73,7 +73,7 @@
 - Agent Teams와 Ultracode는 자동으로 활성화하지 않는다. 존재하지 않는 동시 실행 설정 키를 만들지 않는다.
 
 검토와 안전:
-- 환경별 정책(Paseo·Orca)은 전역 코어와 분리된 독립 블록이며 `policy/global/paseo.md`·`policy/global/orca.md`에서 생성한다(`docs/global-blocks.md`). 이 코어 지침에 Orca·Paseo 규칙을 의역해 넣지 않는다.
+- 환경별 정책은 전역 코어와 분리된 독립 블록이며 `policy/global/paseo.md`(기본 설치)·`policy/global/orca.md`(`--with-orca`로만 설치)에서 생성한다(`docs/global-blocks.md`). 이 코어 지침에 Orca·Paseo 규칙을 의역해 넣지 않는다.
 - 프로젝트에 Task 정책이 설치돼 있으면 업무 ID·실제 브랜치 매핑·문서 기록·완료 게이트를 따른다. 이 전역 모델 정책 설치 자체가 Task 정책이나 Orca 설치를 요구하지는 않는다.
 - 완료 보고에는 변경 사항, 실제 검증 명령과 결과, 남은 위험을 포함한다.
 - 메인은 완료 조건, 관련 diff, 검증 근거, 통합 동작을 확인한다.
@@ -93,7 +93,7 @@
 
 영구 적용 방법:
 1. 변경 대상 파일을 백업하고 관련 없는 개인 지침, 설정, 플러그인, 훅과 권한은 보존한다.
-2. 변경 대상 전역 CLAUDE.md를 백업한 뒤 `python3 -B -m ai_policy.globalblocks sync --host claude --target <CLAUDE.md 경로>`를 실행(드라이런)해 계획을 검토하고, 이상이 없으면 출력된 `plan_sha256`을 `--plan-sha256`에 넘겨 적용한다. 코어·Orca·Paseo 관리 블록(`policy/global/`에서 생성)만 갱신되고 블록 밖 개인 지침은 그대로 유지되며, 문구를 직접 의역해 넣지 않는다.
+2. 변경 대상 전역 CLAUDE.md를 백업한 뒤 `python3 -B -m ai_policy.globalblocks sync --host claude --target <CLAUDE.md 경로>`를 실행(드라이런)해 계획을 검토하고, 이상이 없으면 출력된 `plan_sha256`을 `--plan-sha256`에 넘겨 적용한다. 기본으로 core(`ai-agent-policy:core-claude`)와 paseo 관리 블록(`policy/global/`에서 생성)만 갱신되고 블록 밖 개인 지침은 그대로 유지되며, 문구를 직접 의역해 넣지 않는다. 직접 고친 블록은 `unrecognized_block`·`downgrade_block`으로 거부되며, orca 블록은 `--with-orca`를 줄 때만 관리한다.
 3. 기존 모델 라우팅 지침이 새 전략과 충돌하면 관련 부분을 교체한다. 프로젝트별 지침은 임의로 대량 수정하지 않는다.
 4. 사용자 settings.json의 model을 실제 접근 가능한 claude-sonnet-5-5로 설정한다. 현재 버전의 지원 형식을 확인하여 modelSettings 등 모델별 추론 설정에 Sonnet medium, Opus high를 저장한다.
 5. 사용자 최상위 effortLevel만으로 최신 모델의 추론 설정이 적용된다고 가정하지 않는다. 실제 우선순위와 유효값을 확인한다. 단순히 modelSettings가 JSON으로 파싱된다는 이유로 CLI 적용 성공을 주장하지 않는다.

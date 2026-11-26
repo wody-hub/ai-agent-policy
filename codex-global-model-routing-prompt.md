@@ -64,7 +64,7 @@
 - Sol이 진단 후 수정까지 완료하는 편이 효율적이면 Luna로 다시 넘기지 않는다. 해결 뒤 후속 작업은 Luna로 복귀한다.
 
 검토와 안전:
-- 환경별 정책(Paseo·Orca)은 전역 코어와 분리된 독립 블록이며 `policy/global/paseo.md`·`policy/global/orca.md`에서 생성한다(`docs/global-blocks.md`). 이 코어 지침에 Orca·Paseo 규칙을 의역해 넣지 않는다.
+- 환경별 정책은 전역 코어와 분리된 독립 블록이며 `policy/global/paseo.md`(기본 설치)·`policy/global/orca.md`(`--with-orca`로만 설치)에서 생성한다(`docs/global-blocks.md`). 이 코어 지침에 Orca·Paseo 규칙을 의역해 넣지 않는다.
 - 프로젝트에 Task 정책이 설치돼 있으면 업무 ID·실제 브랜치 매핑·문서 기록·완료 게이트를 따른다. 이 전역 모델 정책 설치 자체가 Task 정책이나 Orca 설치를 요구하지는 않는다.
 - 완료 보고에는 실제 검증 명령과 결과, 변경 사항, 남은 위험을 포함한다.
 - 메인은 관련 변경과 완료 조건, 검증 근거, 통합 동작을 확인한다.
@@ -82,7 +82,7 @@
 - 작업을 마치거나 보고할 때 직접 띄운 백그라운드 프로세스와 그 로그 크기를 함께 보고한다.
 
 적용 방법:
-- 전역 AGENTS.md를 백업한 뒤 `python3 -B -m ai_policy.globalblocks sync --host codex --target <AGENTS.md 경로>`를 실행(드라이런)해 계획을 검토하고, 이상이 없으면 출력된 `plan_sha256`을 `--plan-sha256`에 넘겨 적용한다. 코어·Orca·Paseo 관리 블록(`policy/global/`에서 생성)만 갱신되고 블록 밖 개인 지침은 그대로 유지되며, 문구를 직접 의역해 넣지 않는다.
+- 전역 AGENTS.md를 백업한 뒤 `python3 -B -m ai_policy.globalblocks sync --host codex --target <AGENTS.md 경로>`를 실행(드라이런)해 계획을 검토하고, 이상이 없으면 출력된 `plan_sha256`을 `--plan-sha256`에 넘겨 적용한다. 기본으로 core(`ai-agent-policy:core-codex`)와 paseo 관리 블록(`policy/global/`에서 생성)만 갱신되고 블록 밖 개인 지침은 그대로 유지되며, 문구를 직접 의역해 넣지 않는다. 직접 고친 블록은 `unrecognized_block`·`downgrade_block`으로 거부되며, orca 블록은 `--with-orca`를 줄 때만 관리한다.
 - config.toml에는 설치 시점 Codex 모델 캐시에서 확인된 Luna 계열 최신 지원 ID를 메인과 기본 서브에이전트로 설정하고, 에이전트 활성화와 동시 상한을 반영한다. 이후 Orca Worker 선택은 매 라우팅 시 캐시를 읽는 정본 라우터를 거친다.
 - AGENTS.override.md나 사용자 지정 에이전트 설정이 적용을 가리는 경우 확인하고 기존 내용을 보존하면서 해결한다.
 - 세션마다 자동으로 읽히는 전역 지침 위치를 사용하고, 필요하지 않은 시작 훅은 추가하지 않는다.

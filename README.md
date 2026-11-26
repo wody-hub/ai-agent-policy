@@ -20,7 +20,7 @@ AI에게 개발 업무를 맡길 때 **누가 일을 할지, 어디에서 작업
 | (보관, 병행기) Orca에서 같은 목적 | [Orca 설치 파일](orca-project-setup.md) | 병행기 동안 기존 Orca Run을 마무리하는 프로젝트 |
 | AI가 업무 내용·변경·검증 결과를 기록하고 Git 이력으로 남기기 | [Task 관리 설치 파일](project-task-policy-setup.md) | 설치한 프로젝트와 문서 저장소 |
 
-Codex·Claude Code 전역 지침은 코어·Orca·Paseo 세 관리 블록으로 나뉘어 안전하게 적용됩니다: [전역 블록 분리와 적용 도구](docs/global-blocks.md)
+Codex·Claude Code 전역 지침은 코어·Paseo(기본)와 선택적 Orca 관리 블록으로 나뉘어 안전하게 적용됩니다: [전역 블록 분리와 적용 도구](docs/global-blocks.md)
 
 ### 1. Codex — 작업에 맞게 AI의 역할을 나누는 지침
 

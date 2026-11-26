@@ -81,6 +81,12 @@ def test_default_set_is_core_plus_paseo_and_orca_is_opt_in(capsys):
         assert gb.main(['render', '--host', h, '--with-orca'])==0 and capsys.readouterr().out==R(h, True)
     assert len(R('claude', True).encode())>len(gb.render('claude').encode())
 
+@pytest.mark.parametrize('host', HOSTS)
+def test_default_set_stays_within_the_size_budget_versus_the_legacy_block(host):
+    delta=len(gb.render(host).encode('utf-8'))-len(legacy(host).encode('utf-8'))
+    assert delta<=2000, delta   # the always-loaded text grows by at most ~2 KB per host with the default core + paseo set
+    assert len(R(host, True).encode('utf-8'))-len(legacy(host).encode('utf-8'))>delta
+
 def test_render_strips_trailing_newlines_of_body():
     assert gb.render_block('m:x', '1', 'a\nb\n\n\n')=='<!-- m:x:start version=1 -->\na\nb\n<!-- m:x:end -->\n'
 
@@ -650,3 +656,11 @@ def test_current_blocks_at_end_of_file_without_newline_get_it_added(tmp_path):
     code, plan=sync('claude', t); assert code==0 and [b['status'] for b in plan['blocks']]==['current', 'current'] and [b['action'] for b in plan['blocks']]==['unchanged', 'update']
     assert cli('check', '--host', 'claude', '--target', t)[0]==1
     apply('claude', t, tmp_path/'st'); assert t.read_bytes()==(PRE+R('claude')).encode('utf-8')
+
+def test_documented_block_sizes_match_the_render():
+    doc=(REPO/'docs'/'global-blocks.md').read_text(encoding='utf-8')
+    for host in HOSTS:
+        bl={n: len(t.encode('utf-8')) for n, t in gb.render_blocks(host, cfg(), list(gb.ORDER))}
+        leg=len(legacy(host).encode('utf-8')); default=len(gb.render(host).encode('utf-8')); full=len(R(host, True).encode('utf-8'))
+        row=next(l for l in doc.splitlines() if l.startswith('| %s |'%host))
+        assert [c.strip() for c in row.strip('|').split('|')]==[host, str(bl['core']), str(bl['paseo']), str(bl['orca']), str(leg), str(default), '%+d'%(default-leg), str(full), '%+d'%(full-leg)]
